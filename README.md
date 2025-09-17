@@ -12,17 +12,20 @@ Each agent is designed to be:
 ## 📢 Released Agents
 
 ### 1️⃣ Coinbase AI Agent *(Coinbase AI Agent v1.02.json)*
+- 🌐 [Coinbase Website](https://www.coinbase.com)  
 - Integrates with Coinbase API  
 - Supports real-time market data retrieval and account portfolio insights  
 - Automates trading signals and execution strategies  
 - 🎥 **Tutorial:** [Watch on YouTube](https://www.youtube.com/watch?v=AnLG0tnnhSs)
 
 ### 2️⃣ Gate AI Agent *(Gate AI Agent v1.02.json)*
+- 🌐 [Gate.io Website](https://www.gate.io)  
 - Integrates with Gate.io API  
 - Provides access to spot market data, order book snapshots, and trading automation  
 - Focused on volatility-driven strategies with safety checks  
 
 ### 3️⃣ Bitget AI Agent *(Bitget AI Agent v1.02.json)*
+- 🌐 [Bitget Website](https://www.bitget.com)  
 - Integrates with Bitget API  
 - Enables automated portfolio tracking, trading, and data-driven strategies  
 - Supports order book insights, market stats, and real-time trade execution  
@@ -33,7 +36,7 @@ Each agent is designed to be:
 ## 🔜 Upcoming Agents
 
 We’re releasing a new AI agent **every business day** until all 10 are complete.  
-Upcoming integrations include **XXXXXXXX**, and more.
+Upcoming integrations: XXXXXXXXX
 
 ---
 
