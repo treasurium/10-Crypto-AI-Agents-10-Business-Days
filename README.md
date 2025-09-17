@@ -22,12 +22,18 @@ Each agent is designed to be:
 - Provides access to spot market data, order book snapshots, and trading automation  
 - Focused on volatility-driven strategies with safety checks  
 
+### 3️⃣ Bitget AI Agent *(Bitget AI Agent v1.02.json)*
+- Integrates with Bitget API  
+- Enables automated portfolio tracking, trading, and data-driven strategies  
+- Supports order book insights, market stats, and real-time trade execution  
+- Designed for scaling exchange strategies with safety mechanisms  
+
 ---
 
 ## 🔜 Upcoming Agents
 
 We’re releasing a new AI agent **every business day** until all 10 are complete.  
-Upcoming integrations include **Binance, Bybit, Kraken, Uniswap, Aave**, and more.
+Upcoming integrations include **XXXXXXXX**, and more.
 
 ---
 
