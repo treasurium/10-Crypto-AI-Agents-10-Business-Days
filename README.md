@@ -11,12 +11,12 @@ Each agent is designed to be:
 
 ## 📢 Released Agents
 
-### 1️⃣ Coinbase AI Agent
+### 1️⃣ Coinbase AI Agent (Coinbase AI Agent v1.02.json)
 - Integrates with **Coinbase API**  
 - Supports real-time market data retrieval and account portfolio insights  
 - Automates trading signals and execution strategies  
 
-### 2️⃣ Gate AI Agent
+### 2️⃣ Gate AI Agent (Gate AI Agent v1.02.json)
 - Integrates with **Gate.io API**  
 - Provides access to spot market data, order book snapshots, and trading automation  
 - Focused on volatility-driven strategies with safety checks  
