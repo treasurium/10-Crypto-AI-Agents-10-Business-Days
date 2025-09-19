@@ -45,12 +45,20 @@ Each agent is designed to be:
 * Automates trading strategies, market analysis, and portfolio insights
 * Built with reliability and scalability for institutional-grade workflows
 
+### 5️⃣ KuCoin AI Agent *(KuCoin AI Agent v1.02.json)*
+
+* 🌐 [KuCoin Website](https://www.kucoin.com)
+* Integrates with KuCoin API
+* Supports spot and futures trading automation
+* Provides portfolio insights, market analysis, and order management
+* Designed for traders looking for advanced multi-market execution
+* 🎥 **Tutorial:** *(Coming soon)*
+
 ---
 
 ## 🔜 Upcoming Agents
 
 We’re releasing a new AI agent **every business day** until all 10 are complete.
-Upcoming integrations: XXXXXXXXX
 
 ---
 
@@ -80,5 +88,6 @@ Treasurium is built by a diverse team of founders at the intersection of **AI** 
 * 🧩 n8n Creator Profile: [Don The Gem Dealer](https://n8n.io/creators/don-the-gem-dealer/)
 * 📬 Open to collaborations, contributors, and conversation
 
+---
 
-Want me to also **add YouTube tutorial placeholders for the upcoming 6 agents** (so the README looks uniform from the start), or keep them only as we release each one?
+✨ *Part of the Treasurium.ai “10 Agents in 10 Days” challenge — pushing the boundaries of AI × Web3 automation.*
