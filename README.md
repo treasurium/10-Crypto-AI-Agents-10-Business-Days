@@ -20,6 +20,8 @@ Each agent is designed to be:
 * Automates trading signals and execution strategies
 * 🎥 **Tutorial:** [Watch on YouTube](https://www.youtube.com/watch?v=AnLG0tnnhSs)
 
+---
+
 ### 2️⃣ Gate AI Agent *(Gate AI Agent v1.02.json)*
 
 * 🌐 [Gate.io Website](https://www.gate.io)
@@ -27,6 +29,8 @@ Each agent is designed to be:
 * Provides access to spot market data, order book snapshots, and trading automation
 * Focused on volatility-driven strategies with safety checks
 * 🎥 **Tutorial:** [Watch on YouTube](https://www.youtube.com/watch?v=_tXy_3iBE4U&t=48s)
+
+---
 
 ### 3️⃣ Bitget AI Agent *(Bitget AI Agent v1.02.json)*
 
@@ -37,6 +41,8 @@ Each agent is designed to be:
 * Designed for scaling exchange strategies with safety mechanisms
 * 🎥 **Tutorial:** [Watch on YouTube](https://www.youtube.com/watch?v=KNppg7xhySA)
 
+---
+
 ### 4️⃣ OKX AI Agent *(OKX AI Agent v1.02.json)*
 
 * 🌐 [OKX Website](https://www.okx.com)
@@ -44,6 +50,9 @@ Each agent is designed to be:
 * Provides access to spot and derivatives markets
 * Automates trading strategies, market analysis, and portfolio insights
 * Built with reliability and scalability for institutional-grade workflows
+* 🎥 **Tutorial:** [Watch on YouTube](https://youtu.be/TAA_BFuwml0?si=p2ipa0H7Le8QJoeX)
+
+---
 
 ### 5️⃣ KuCoin AI Agent *(KuCoin AI Agent v1.02.json)*
 
@@ -52,7 +61,7 @@ Each agent is designed to be:
 * Supports spot and futures trading automation
 * Provides portfolio insights, market analysis, and order management
 * Designed for traders looking for advanced multi-market execution
-* 🎥 **Tutorial:** *(Coming soon)*
+* 🎥 **Tutorial:** [Watch on YouTube](https://youtu.be/TAA_BFuwml0?si=Dr6aLLB8qLPBFY9k)
 
 ---
 
