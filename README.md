@@ -75,6 +75,17 @@ Each agent is designed to be:
 
 ---
 
+### 7️⃣ Bybit AI Agent *(Bybit AI Agent v1.02.json)*
+
+* 🌐 [Bybit Website](https://www.bybit.com)
+* Integrates with Bybit API  
+* Provides spot and derivatives market data  
+* Automates trading workflows, order execution, and risk management  
+* Designed for high-frequency and derivatives-focused traders  
+* 🎥 **Tutorial:** [Watch on YouTube]()  
+
+---
+
 ## 🔜 Upcoming Agents
 
 We’re releasing a new AI agent **every business day** until all 10 are complete.
