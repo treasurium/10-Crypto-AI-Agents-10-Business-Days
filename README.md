@@ -65,6 +65,16 @@ Each agent is designed to be:
 
 ---
 
+### 6️⃣ HTX AI Agent *(HTX AI Agent v1.02.json)*
+
+* 🌐 [HTX Website](https://www.htx.com)
+* Integrates with HTX API
+* Provides real-time market data, order execution, and portfolio automation
+* Designed for traders seeking liquidity and multi-market coverage
+* 🎥 **Tutorial:** [Watch on YouTube](https://youtu.be/Crr41F8tr0Q)
+
+---
+
 ## 🔜 Upcoming Agents
 
 We’re releasing a new AI agent **every business day** until all 10 are complete.
