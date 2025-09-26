@@ -86,6 +86,17 @@ Each agent is designed to be:
 
 ---
 
+### 8️⃣ MEXC AI Agent *(MEXC AI Agent v1.02.json)*
+
+* 🌐 [MEXC Website](https://www.mexc.com)
+* Integrates with MEXC API  
+* Provides access to spot, margin, and futures markets  
+* Automates liquidity-driven trading strategies  
+* Designed for global traders needing speed + scalability  
+* 🎥 **Tutorial:** [Watch on YouTube]() 
+
+---
+
 ## 🔜 Upcoming Agents
 
 We’re releasing a new AI agent **every business day** until all 10 are complete.
