@@ -82,7 +82,7 @@ Each agent is designed to be:
 * Provides spot and derivatives market data  
 * Automates trading workflows, order execution, and risk management  
 * Designed for high-frequency and derivatives-focused traders  
-* 🎥 **Tutorial:** [Watch on YouTube]()  
+* 🎥 **Tutorial:** [Watch on YouTube](https://youtu.be/IpWPGDt9OUU)  
 
 ---
 
