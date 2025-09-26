@@ -93,6 +93,16 @@ Each agent is designed to be:
 * Provides access to spot, margin, and futures markets  
 * Automates liquidity-driven trading strategies  
 * Designed for global traders needing speed + scalability  
+* 🎥 **Tutorial:** [Watch on YouTube](https://youtu.be/x4MZ5SmEPwM) 
+
+---
+
+### 9️⃣ Upbit AI Agent *(Upbit AI Agent v1.02.json)*
+
+* 🌐 [Upbit Website](https://www.upbit.com)
+* Integrates with Upbit API  
+* Provides spot market data, portfolio insights, and execution tools  
+* Tailored for Korean and international traders seeking secure automation  
 * 🎥 **Tutorial:** [Watch on YouTube]() 
 
 ---
