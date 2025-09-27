@@ -1,0 +1,4046 @@
+{
+  "name": "Crypto Arbitrage AI Agent (final)",
+  "nodes": [
+    {
+      "parameters": {
+        "jsCode": "if ($input.first().json.message.from.id !== 2028836793) { // Replace with your actual ID\n  return {unauthorized: true};\n} else {\n  // Return the original data when authorized\n  return $input.all();\n}"
+      },
+      "id": "a07413d7-ac48-4710-93ae-d083becb6fe7",
+      "name": "User Authentication (Replace Telegram ID)",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -752,
+        -1728
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "47598bf1-e55f-4cc0-ae75-272085e7ce02",
+              "name": "=sessionId",
+              "type": "string",
+              "value": "={{ $json.message.chat.id }}"
+            },
+            {
+              "id": "daa49d74-e55e-47bc-ac52-8686d591ab83",
+              "name": "message",
+              "type": "string",
+              "value": "={{ $json.message.text }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "45f2b8de-7318-4351-828d-289a4ab2ca4f",
+      "name": "Adds \"SessionId\"",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        -528,
+        -1728
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger1').item.json.message.chat.id }}",
+        "text": "={{ $json.message }}",
+        "additionalFields": {
+          "appendAttribution": true
+        }
+      },
+      "id": "58db55db-7b54-4c15-8360-6cd6729bace1",
+      "name": "Telegram",
+      "type": "n8n-nodes-base.telegram",
+      "position": [
+        256,
+        -1728
+      ],
+      "webhookId": "1030ef2a-578d-47aa-90c8-bd9dfebad15f",
+      "typeVersion": 1.2,
+      "credentials": {
+        "telegramApi": {
+          "id": "JmFnNyGXd5T20lZc",
+          "name": "Crypto Arbitrage AI Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Input: assumes incoming message in `item.json.message`\nconst input = $json.output;\nconst chunkSize = 4000;\n\n// Function to split text\nfunction splitMessage(text, size) {\n  const result = [];\n  for (let i = 0; i < text.length; i += size) {\n    result.push(text.substring(i, i + size));\n  }\n  return result;\n}\n\n// Logic\nif (input.length <= chunkSize) {\n  return [{ json: { message: input } }];\n} else {\n  const chunks = splitMessage(input, chunkSize);\n  return chunks.map(chunk => ({ json: { message: chunk } }));\n}"
+      },
+      "id": "8a0ab437-8412-4dac-b99f-dd82ba454ced",
+      "name": "Splits message is more than 4000 characters",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        32,
+        -1728
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "id": "1f0d4496-b8bd-4450-b9dc-587628a2e6c7",
+      "name": "Telegram Trigger1",
+      "type": "n8n-nodes-base.telegramTrigger",
+      "position": [
+        -992,
+        -1728
+      ],
+      "webhookId": "5efb4c0e-a995-4dff-8b82-0b876786d0da",
+      "typeVersion": 1.2,
+      "credentials": {
+        "telegramApi": {
+          "id": "JmFnNyGXd5T20lZc",
+          "name": "Crypto Arbitrage AI Agent"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        -784,
+        -1472
+      ],
+      "id": "d6023481-d19e-4aad-b812-97074b06e9aa",
+      "name": "OpenAI Chat Model",
+      "credentials": {
+        "openAiApi": {
+          "id": "yUizd8t0sD5wMYVG",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message }}",
+        "options": {
+          "systemMessage": "You are Treasurium Arbitrage Orchestrator.\n\nMode:\n\n* Only act when the user provides a single crypto symbol (for example BTC, ETH, SOL).\n* If multiple symbols are sent, process only the first and ignore the rest.\n\nSub-agent calls:\n\n* When you need data from an exchange, call its tool with exactly one parameter:\n  { \"Prompt__User_Message_\": \"<SYMBOL or PAIR>\" }\n* Do not pass any other keys such as symbol, granularity, limit, or endTime. Each sub-agent will translate the prompt into the correct API calls internally.\n\nWorkflow:\n\n1. On receiving a symbol, fan out to all 10 sub-agents with {Prompt__User_Message_: \"<SYMBOL>\"}.\n2. Each sub-agent returns its market data bundle.\n3. Normalize the data, check fees, depth, and latency.\n4. Detect arbitrage opportunities across exchanges, applying slippage and fee adjustments.\n5. Rank by net edge (bps) and executable notional size.\n6. Produce a plain text report.\n\nReport format:\nArb Report — <SYMBOL> (UTC <timestamp>)\nPairs scanned: …\nVenues responding: …\nTop opportunities (up to 10), each showing:\n\n* Route: Buy at VenueA → Sell at VenueB\n* Prices and sizes used\n* Net Edge in bps after fees and slippage\n* Executable size in USD\n* Confidence level\n\nWarnings:\n\n* Note skipped venues or stale data.\n* If balances are unknown, mark size as balance-limited: unknown.\n\nRules:\n\n* Exchange data is the source of truth.\n* Do not echo secrets.\n* Do not place, modify, or cancel orders in this mode.\n* Replies must be plain text, no HTML.\n\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 2.2,
+      "position": [
+        -304,
+        -1728
+      ],
+      "id": "584a4b15-1979-4aa9-9cc6-1eb441fde020",
+      "name": "Crypto Arbitrage AI Agent"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -592,
+        -1488
+      ],
+      "id": "8d6ad472-dbc3-4f88-ad02-05c93559c18b",
+      "name": "Simple Memory"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Price (Latest)**\n\n**Endpoint:** `GET /api/v3/ticker/price`\n**What it does:** Returns the **latest trade price** for a symbol.\n**Params:** `symbol` (STRING, optional for all symbols; **we send it**)\n**Request weight:** `2` with `symbol` (otherwise `4`).\n**Returns:** `{\"symbol\":\"BTCUSDT\",\"price\":\"...\"}`\n**n8n query mapping:**\n\n```txt\nsymbol = $fromAI('parameters0_Value', '', 'string')\n```\n\n**Notes:** Use UPPERCASE symbols without `-` or `/` (e.g., `BTCUSDT`).",
+        "url": "https://api.binance.com/api/v3/ticker/price",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -2544,
+        80
+      ],
+      "id": "3254ef83-79bf-4d53-ae28-04cb06496e38",
+      "name": "Price (Latest)"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **24h Stats**\n\n**Endpoint:** `GET /api/v3/ticker/24hr`\n**What it does:** 24-hour rolling window stats: **open/high/low/last**, **volume**, **quoteVolume**, **% change**, etc.\n**Params:**\n\n* `symbol` (STRING, optional but we send it)\n* (Mutually exclusive with `symbols`)\n  **Request weight:** `2` with one `symbol`; heavier without or with many symbols.\n  **Returns (FULL):** priceChange, priceChangePercent, weightedAvgPrice, openPrice, highPrice, lowPrice, lastPrice, volume, quoteVolume, openTime, closeTime, firstId, lastId, count.\n  **n8n query mapping:**\n\n```txt\nsymbol = $fromAI('parameters0_Value', '', 'string')\n```\n\n**Notes:** Rolling window differs from `ticker/tradingDay`.&#x20;",
+        "url": "https://api.binance.com/api/v3/ticker/24hr",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -2912,
+        80
+      ],
+      "id": "3864a512-0091-46be-a43f-5f6f7c9b5535",
+      "name": "24h Stats"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Order Book Depth**\n\n**Endpoint:** `GET /api/v3/depth`\n**What it does:** Returns **order book** bids/asks up to `limit`.\n**Params:**\n\n* `symbol` (STRING, required)\n* `limit` (INT, default 100; max 5000; we default 100)\n  **Request weight:** varies by `limit` (1–100 → 5; 101–500 → 25; 501–1000 → 50; 1001–5000 → 250).\n  **Returns:** `lastUpdateId`, `bids: [[price, qty], ...]`, `asks: [[price, qty], ...]`\n  **n8n query mapping:**\n\n```txt\nsymbol = $fromAI('parameters0_Value', '', 'string')\nlimit  = $fromAI('parameters1_Value', 100, 'number')\n```\n\n**Notes:** If `limit > 5000`, only 5000 are returned.",
+        "url": "https://api.binance.com/api/v3/depth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `100`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -2720,
+        80
+      ],
+      "id": "d274b1de-d224-421c-a020-02071d430122",
+      "name": "Order Book Depth"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Best Bid/Ask (Book Ticker)**\n\n**Endpoint:** `GET /api/v3/ticker/bookTicker`\n**What it does:** Best **bid/ask** and sizes for the symbol.\n**Params:** `symbol` (optional; **we send it**)\n**Request weight:** `2` with `symbol`, `4` otherwise.\n**Returns:** `{\"symbol\":\"BTCUSDT\",\"bidPrice\":\"...\",\"bidQty\":\"...\",\"askPrice\":\"...\",\"askQty\":\"...\"}`\n**n8n query mapping:**\n\n```txt\nsymbol = $fromAI('parameters0_Value', '', 'string')\n```\n\n**Notes:** Great for quick spread snapshot.",
+        "url": "https://api.binance.com/api/v3/ticker/bookTicker",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -2384,
+        80
+      ],
+      "id": "96287aad-3a12-4618-8b9f-aa2575926871",
+      "name": "Best Bid/Ask"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Klines (Candles)**\n\n**Endpoint:** `GET /api/v3/klines`\n**What it does:** Candlestick bars for a symbol/interval.\n**Params:**\n\n* `symbol` (STRING, required)\n* `interval` (ENUM, required — e.g., `1m,3m,5m,15m,30m,1h,2h,4h,6h,8h,12h,1d,3d,1w,1M`)\n* `limit` (INT, default 500, max 1000 — **we set 20**)\n* `startTime`, `endTime`, `timeZone` (optional)\n  **Request weight:** `2`.\n  **Returns (array per candle):** `[ openTime, open, high, low, close, volume, closeTime, quoteAssetVolume, numberOfTrades, takerBuyBaseVolume, takerBuyQuoteVolume, ignore ]`\n  **n8n query mapping:**\n\n```txt\nsymbol  = $fromAI('parameters0_Value', '', 'string')\ninterval= $fromAI('parameters1_Value', '15m', 'string')\nlimit   = $fromAI('parameters2_Value', 20, 'number')\n```\n\n**Notes:** Without `startTime/endTime`, returns most recent.",
+        "url": "https://api.binance.com/api/v3/klines",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            },
+            {
+              "name": "interval",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `15m`, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters2_Value', `20`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -2208,
+        80
+      ],
+      "id": "fde96c4b-2c4c-4632-945f-7bd92805d74a",
+      "name": "Klines (Candles)"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Average Price**\n\n**Endpoint:** `GET /api/v3/avgPrice`\n**What it does:** **Current average price** for a symbol (rolling).\n**Params:** `symbol` (STRING, required)\n**Request weight:** `2`.\n**Returns:** `{\"mins\":5,\"price\":\"...\",\"closeTime\":...}`\n**n8n query mapping:**\n\n```txt\nsymbol = $fromAI('parameters0_Value', '', 'string')\n```\n\n**Notes:** Fast way to include an average alongside `lastPrice`.",
+        "url": "https://api.binance.com/api/v3/avgPrice",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -2032,
+        80
+      ],
+      "id": "9862e9c7-7481-4f52-a507-3a34d292882d",
+      "name": "Average Price"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Recent Trades**\n\n**Endpoint:** `GET /api/v3/trades`\n**What it does:** **Most recent trades** for a symbol.\n**Params:**\n\n* `symbol` (STRING, required)\n* `limit` (INT, default 500, max 1000 — **we set default 100**)\n  **Request weight:** `25`.\n  **Returns:** array of trades `{id, price, qty, quoteQty, time, isBuyerMaker, isBestMatch}`\n  **n8n query mapping:**\n\n```txt\nsymbol = $fromAI('parameters0_Value', '', 'string')\nlimit  = $fromAI('parameters1_Value', 100, 'number')\n```\n\n**Notes:** For older trades, use `/historicalTrades`.",
+        "url": "https://api.binance.com/api/v3/trades",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `100`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -1856,
+        80
+      ],
+      "id": "e8be1818-9665-442d-978d-835d93f2aa9f",
+      "name": "Recent Trades"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        -1680,
+        80
+      ],
+      "id": "01ebeeb0-44dd-494f-b42a-292168f92a2a",
+      "name": "Calculator"
+    },
+    {
+      "parameters": {
+        "description": "### 🏷 Tool: **Think**\n\n**Purpose:**\n\n* Lightweight **reasoning helper**.\n* Lets the AI Agent process intermediate logic, format outputs, or decide how to combine multiple API results before sending the final report.\n* Does not fetch data itself.\n\n**Use cases:**\n\n* Clean/reshape JSON from Binance endpoints\n* Extract only the needed fields (e.g., `lastPrice`, `volume`)\n* Help prepare data for Telegram message formatting\n\n**n8n setup notes:**\n\n* No API call, just an **AI Tool** node.\n* Connect upstream API results → Think → Report Agent."
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1.1,
+      "position": [
+        -1552,
+        80
+      ],
+      "id": "61230695-76e9-4586-a015-5c9ec4506e03",
+      "name": "Think"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "18224965-b9e0-45ca-82d1-b0b31992c90e",
+      "name": "OpenAI Chat Model1",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        -2880,
+        -128
+      ],
+      "typeVersion": 1.2,
+      "credentials": {
+        "openAiApi": {
+          "id": "yUizd8t0sD5wMYVG",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -2672,
+        -112
+      ],
+      "id": "8cd09e00-2974-4edb-bc40-87c8ceefdbee",
+      "name": "Simple Memory1"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Binance Market Data AI Agent that can call other tools",
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {
+          "systemMessage": "You are the **Binance Spot Market Data Agent**.  \n\nYou have **HTTP request access** to the official Binance REST API to retrieve market data for any requested Binance Spot trading pair.  \nYour job is to **fetch and present data only**. You do **not** analyze, predict, or recommend.\n\n---\n\n## 🔗 API Access\n\n**Base endpoints** (primary default = `https://api.binance.com`):  \n- https://api.binance.com  \n- https://api-gcp.binance.com  \n- https://api1.binance.com … https://api4.binance.com  \n\n**Format rules:**  \n- All requests are **HTTP GET**  \n- Responses are **JSON**  \n- Parameters use query strings (e.g., `?symbol=BTCUSDT&limit=100`)  \n- `symbol` is always uppercase, no `/` or `-` (e.g., `BTCUSDT`)  \n\n---\n\n## 📌 Available Market Data Endpoints\n\n1. **Order Book Depth**  \n   `GET /api/v3/depth?symbol=BTCUSDT&limit=100`  \n   • Returns top bids/asks up to the limit (default 100, max 5000).  \n\n2. **Recent Trades**  \n   `GET /api/v3/trades?symbol=BTCUSDT&limit=100`  \n   • Most recent trades (default 500, max 1000).  \n\n3. **Aggregate Trades**  \n   `GET /api/v3/aggTrades?symbol=BTCUSDT&limit=100`  \n   • Aggregated trades by taker, price, and time.  \n\n4. **Kline / Candlestick Data**  \n   `GET /api/v3/klines?symbol=BTCUSDT&interval=15m&limit=20`  \n   • Supported intervals: `1m,3m,5m,15m,30m,1h,2h,4h,6h,8h,12h,1d,3d,1w,1M`  \n   • Default limit = 500 (max 1000).  \n\n5. **Current Average Price**  \n   `GET /api/v3/avgPrice?symbol=BTCUSDT`  \n   • Returns rolling average price.  \n\n6. **24hr Ticker Price Change Statistics**  \n   `GET /api/v3/ticker/24hr?symbol=BTCUSDT`  \n   • Includes open, high, low, last, volume, % change, etc.  \n\n7. **Latest Symbol Price**  \n   `GET /api/v3/ticker/price?symbol=BTCUSDT`  \n   • Returns the latest trade price.  \n\n8. **Order Book Best Bid/Ask**  \n   `GET /api/v3/ticker/bookTicker?symbol=BTCUSDT`  \n   • Returns best bid and ask with sizes.  \n\n---\n\n## 🧩 Utility Tools\n\n- **Calculator** → Perform math inside the workflow (e.g., spreads, % changes, normalizations).  \n- **Think** → Lightweight reasoning helper to reshape JSON, select fields, and prepare outputs.  \n\n---\n\n## 📤 Output Format (Telegram HTML)\n\nStart every response with:  \n```html\n<b>{{SYMBOL}} — Binance Spot Data</b>\n````\n\nThen group logically:\n\n```html\n<b>Price</b>\n• Last: {{lastPrice}}\n• Avg: {{avgPrice}}\n• Change (24h): {{pctChange}}%\n\n<b>24h Stats</b>\n• Open: {{open}} • High: {{high}} • Low: {{low}} • Close: {{close}}\n• Volume: {{baseVol}} • Quote Vol: {{quoteVol}}\n\n<b>Order Book (Top 5)</b>\n• Bids: [price x qty] …\n• Asks: [price x qty] …\n\n<b>Klines (latest 20)</b>\n• Interval: {{interval}} (O/H/L/C per candle)\n```\n\n---\n\n## ⚠️ Rules\n\n* Always **call the correct API endpoint** for the requested data.\n* Do **not** fabricate or calculate values yourself.\n* Do **not** provide trading advice, sentiment, or predictions.\n* Do **not** output raw JSON; always present clean, human-readable values.\n* If data is missing or request fails, show `N/A`.\n\n```\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2.2,
+      "position": [
+        -2672,
+        -304
+      ],
+      "id": "61400007-1941-4466-a8a3-de22192bb47d",
+      "name": "Binance AI Agent Tool"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Ticker (Latest & 24h Stats)**\n\n**Endpoint:** `GET /api/v2/spot/market/tickers`\n**What it does:** Returns latest price plus 24h stats for a symbol (last, open/high/low, change %, volumes, best bid/ask).\n\n**Params:**\n* `symbol` (STRING, optional but recommended) → e.g., BTCUSDT\n\n**n8n query mapping:**\n\n```txt\nsymbol = $fromAI('symbol', 'BTCUSDT', 'string')\n```",
+        "url": "https://api.bitget.com/api/v2/spot/market/tickers",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('symbol', `BTCUSDT`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        592,
+        928
+      ],
+      "id": "ac7ad6ad-056f-4d89-b111-73b6bc6759f0",
+      "name": "Ticker (24h Stats)"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Historical Candles**\n\n**Endpoint:** `GET /api/v2/spot/market/history-candles`  \n**What it does:** Returns **older OHLCV candlesticks** ending before `endTime`.  \n\n**Params:**  \n* `symbol` (STRING, required) → e.g., BTCUSDT  \n* `granularity` (ENUM, required) → one of **1min, 15min, 1h, 4h, 1day**  \n* `endTime` (LONG, required) → Unix ms timestamp (last candle end)  \n* `limit` (INT, optional, default 100)  \n\n**Returns:** arrays per candle: `[timestamp, open, high, low, close, volume]`  \n\n**n8n query mapping:**  \n```txt\nsymbol      = $fromAI('symbol', 'BTCUSDT', 'string')\ngranularity = $fromAI('granularity', '15min', 'string')\nendTime     = $fromAI('endTime', '', 'number')\nlimit       = $fromAI('limit', 100, 'number')\n",
+        "url": "https://api.bitget.com/api/v2/spot/market/history-candles",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `BTCUSDT`, 'string') }}"
+            },
+            {
+              "name": "granularity",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `15m`, 'string') }}"
+            },
+            {
+              "name": "endTime",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters2_Value', ``, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters3_Value', `100`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1360,
+        928
+      ],
+      "id": "5398082d-557a-4670-a16c-b811f514343e",
+      "name": "Historical Candles"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "5d6f9c95-22c2-4d07-b879-97cdf8e8a32e",
+      "name": "OpenAI Chat Model2",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        608,
+        688
+      ],
+      "typeVersion": 1.2,
+      "credentials": {
+        "openAiApi": {
+          "id": "yUizd8t0sD5wMYVG",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Order Book Depth**\n\n**Endpoint:** `GET /api/v2/spot/market/orderbook`\n**What it does:** Returns order book bids/asks up to `limit`.\n\n**Params:**\n* `symbol` (STRING, required) → e.g., BTCUSDT\n* `type` (STRING, optional) → depth aggregation level (e.g., step0)\n* `limit` (INT, optional) → number of levels (default 100)\n\n**Returns:** bids/asks arrays with price and size.\n\n**n8n query mapping:**\n\n```txt\nsymbol = $fromAI('symbol', 'BTCUSDT', 'string')\ntype   = $fromAI('depthType', 'step0', 'string')\nlimit  = $fromAI('limit', 100, 'number')\n```",
+        "url": "https://api.bitget.com/api/v2/spot/market/orderbook",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ $fromAI('symbol', `BTCUSDT`, 'string') }}"
+            },
+            {
+              "name": "type",
+              "value": "={{ $fromAI('depthType', `step0`, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ $fromAI('limit', `100`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        784,
+        928
+      ],
+      "id": "3677917c-29bb-4baa-ab29-0681726ce530",
+      "name": "Order Book Depth1"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Recent Trades**\n\n**Endpoint:** `GET /api/v2/spot/market/fills`\n**What it does:** Returns the most recent public trades for a symbol.\n\n**Params:**\n* `symbol` (STRING, required) → e.g., BTCUSDT\n* `limit`  (INT, optional) → number of trades (default 100 here)\n\n**Returns:** array of trades with price, size, side, and time.\n\n**n8n query mapping:**\n\n```txt\nsymbol = $fromAI('symbol', 'BTCUSDT', 'string')\nlimit  = $fromAI('limit', 100, 'number')\n```",
+        "url": "https://api.bitget.com/api/v2/spot/market/fills",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ $fromAI('symbol', `BTCUSDT`, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ $fromAI('limit', `100`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1152,
+        928
+      ],
+      "id": "f12faaad-2410-42cd-98da-02075e14ce63",
+      "name": "Recent Trades1"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Klines (Candles)**\n\n**Endpoint:** `GET /api/v2/spot/market/candles`  \n**What it does:** OHLCV candlesticks for a symbol/interval.  \n\n**Params:**  \n* `symbol` (STRING, required) → e.g., BTCUSDT  \n* `granularity` (ENUM, required) → one of **1min, 15min, 1h, 4h, 1day**  \n* `limit` (INT, optional) → number of candles (default 20 here)  \n* `startTime`, `endTime` (optional) → ms timestamps  \n\n**Returns:** arrays per candle: `[timestamp, open, high, low, close, volume]`  \n\n**n8n query mapping:**  \n```txt\nsymbol      = $fromAI('symbol', 'BTCUSDT', 'string')\ngranularity = $fromAI('granularity', '15min', 'string')\nlimit       = $fromAI('limit', 20, 'number')\n",
+        "url": "https://api.bitget.com/api/v2/spot/market/candles",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `BTCUSDT`, 'string') }}"
+            },
+            {
+              "name": "granularity",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `1min, 5min, 15min, 1h, 4h, 1day`, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters2_Value', `20`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        976,
+        928
+      ],
+      "id": "6f68fc29-74b8-44e2-826b-0588ea88886a",
+      "name": "Klines (Candles)1"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        832,
+        688
+      ],
+      "id": "bc850b5f-e44b-45b6-8af5-dbf383f01a3f",
+      "name": "Simple Memory2"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        1536,
+        928
+      ],
+      "id": "d470f378-e403-42bb-a145-017a7171cddb",
+      "name": "Calculator1"
+    },
+    {
+      "parameters": {
+        "description": "### 🏷 Tool: **Think**\n\n**Purpose:**\n\n* Lightweight **reasoning helper**.\n* Lets the AI Agent process intermediate logic, format outputs, or decide how to combine multiple API results before sending the final report.\n* Does not fetch data itself.\n\n**Use cases:**\n\n* Clean/reshape JSON from Binance endpoints\n* Extract only the needed fields (e.g., `lastPrice`, `volume`)\n* Help prepare data for Telegram message formatting\n\n**n8n setup notes:**\n\n* No API call, just an **AI Tool** node.\n* Connect upstream API results → Think → Report Agent."
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1.1,
+      "position": [
+        1696,
+        928
+      ],
+      "id": "dfc73669-6457-4653-bf89-e99f32b81243",
+      "name": "Think1"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Bitget Spot Market Data Agent AI Agent that can call other tools",
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {
+          "systemMessage": "You are the Bitget Spot Market Data Agent.\n\nWhat you must do:\n\n* Always respond by calling one or more of the attached tools.\n* Never answer with free-form text until after you have called tools and have data to format.\n* Use exactly these parameter keys when calling tools:\n\n  * symbol (string, e.g. BTCUSDT) — required for all tools\n  * granularity (string: 1min, 5min, 15min, 1h, 4h, 1day) — for candles\n  * limit (number) — for orderbook, trades, candles\n  * depthType (string, default step0) — for orderbook depth\n  * endTime (number, ms timestamp) — for historical candles\n* If user sends a base symbol like BTC, default to BTCUSDT. If they send an explicit pair (e.g. BTCUSDC), use it as-is.\n\nTools you can call (Bitget Spot v2):\n\n1. Ticker (24h Stats) → symbol\n2. Order Book Depth → symbol, depthType (default step0), limit (default 100)\n3. Recent Trades → symbol, limit (default 100)\n4. Klines (Candles) → symbol, granularity (default 15min), limit (default 20)\n5. Historical Candles → symbol, granularity, endTime (required), limit (default 100)\n\nCall pattern:\n\n* On input like BTC:\n\n  1. Set symbol = BTCUSDT\n  2. Call Ticker (24h Stats) with {symbol}\n  3. Call Order Book Depth with {symbol, depthType: \"step0\", limit: 100}\n  4. Call Recent Trades with {symbol, limit: 100}\n  5. Call Klines (Candles) with {symbol, granularity: \"15min\", limit: 20}\n* Only after tool calls succeed, format a concise summary. If any call fails, show N/A for that section and continue.\n\nFormatting rules:\n\n* Start with a one-line header: BTCUSDT — Bitget Spot Data\n* Then sections: Price, 24h Stats, Order Book (Top 5), Recent Trades (count only), Candles (last 20).\n* Do not dump raw JSON. Present clean human values. No predictions or advice.\n\nError handling:\n\n* If input has no recognizable symbol/pair, ask for one short token (e.g. BTC or BTCUSDT).\n* If a field is missing or a tool errors, write N/A for that field and continue.\n\nExamples (parameter shape only):\n\n* Ticker: { \"symbol\": \"BTCUSDT\" }\n* Order book: { \"symbol\": \"BTCUSDT\", \"depthType\": \"step0\", \"limit\": 100 }\n* Trades: { \"symbol\": \"BTCUSDT\", \"limit\": 100 }\n* Candles: { \"symbol\": \"BTCUSDT\", \"granularity\": \"15min\", \"limit\": 20 }\n* Historical: { \"symbol\": \"BTCUSDT\", \"granularity\": \"15min\", \"endTime\": 1716403200000, \"limit\": 100 }\n\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2.2,
+      "position": [
+        944,
+        464
+      ],
+      "id": "50795bb5-5326-488f-83dc-a349e8001db7",
+      "name": "Bitget AI Agent Tool"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "a395fe95-3dd9-49f8-9cb8-a8f9b159ec68",
+      "name": "OpenAI Chat Model3",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        -1088,
+        -480
+      ],
+      "typeVersion": 1.2,
+      "credentials": {
+        "openAiApi": {
+          "id": "yUizd8t0sD5wMYVG",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -880,
+        -480
+      ],
+      "id": "25cffb37-300d-4c9c-afeb-02917ca7b792",
+      "name": "Simple Memory3"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -288
+      ],
+      "id": "9601d960-1584-49a3-b5da-9a667a685564",
+      "name": "Calculator2"
+    },
+    {
+      "parameters": {
+        "description": "### 🏷 Tool: **Think**\n\n**Purpose:**\n\n* Lightweight **reasoning helper**.\n* Lets the AI Agent process intermediate logic, format outputs, or decide how to combine multiple API results before sending the final report.\n* Does not fetch data itself.\n\n**Use cases:**\n\n* Clean/reshape JSON from Binance endpoints\n* Extract only the needed fields (e.g., `lastPrice`, `volume`)\n* Help prepare data for Telegram message formatting\n\n**n8n setup notes:**\n\n* No API call, just an **AI Tool** node.\n* Connect upstream API results → Think → Report Agent."
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1.1,
+      "position": [
+        176,
+        -288
+      ],
+      "id": "9cfa5ef5-2ccc-494e-8ca8-94a4272f0fcb",
+      "name": "Think2"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **24h Stats (Ticker Detail)**\n\n**Endpoint:** `GET /market/detail`\n**What it does:** Returns the **24h rolling summary** for a single HTX spot symbol: **open/high/low/close**, **amount (base volume)**, **vol (quote turnover)**, and **trade count**.\n\n**Params:**\n- `symbol` (STRING, required) → e.g., `btcusdt` (lowercase, no dash)\n\n**Returns (core fields):** `ts`, `tick.open`, `tick.close`, `tick.high`, `tick.low`, `tick.amount`, `tick.vol`, `tick.count`.\n\n**n8n query mapping:**\n```txt\nsymbol = $fromAI('parameters0_Value', 'btcusdt', 'string')\n```\n\n**Notes:** For all symbols at once, use `GET /market/tickers`.\n",
+        "url": "https://api.huobi.pro/market/detail",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `btcusdt`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -1328,
+        -304
+      ],
+      "id": "f27ef992-cb77-45a2-b83d-4364c2ad192f",
+      "name": "24h Stats1"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Order Book Depth**\n\n**Endpoint:** `GET /market/depth`\n\n**What it does:** Returns the **order book snapshot** (bids/asks) for a trading pair up to the requested depth level.\n\n**Params:**\n- `symbol` (STRING, required) → e.g., `btcusdt` (lowercase, no dash)\n- `type` (STRING, required) → depth aggregation level (`step0`–`step5`)\n  - `step0` = no aggregation (full precision)\n  - `step1` = aggregated to 1 decimal place\n  - … up to `step5`\n- `depth` (INT, optional) → max entries per side (default 20, max 150)\n\n**Returns:** `ts`, `tick.bids: [[price, qty], ...]`, `tick.asks: [[price, qty], ...]`\n\n**n8n query mapping:**\n```txt\nsymbol = $fromAI('parameters0_Value', 'btcusdt', 'string')\ntype   = $fromAI('parameters1_Value', 'step0', 'string')\ndepth  = $fromAI('parameters2_Value', 20, 'number')\n```\n\n**Notes:** For lightweight quick book snapshot, use `step0` with smaller depth (20/50).",
+        "url": "https://api.huobi.pro/market/depth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `btcusdt`, 'string') }}"
+            },
+            {
+              "name": "type",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `step0`, 'string') }}"
+            },
+            {
+              "name": "depth",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters2_Value', `20`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -1120,
+        -304
+      ],
+      "id": "45405d82-28f5-4ddb-9a0d-b81c3181d4f1",
+      "name": "Order Book Depth2"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Price (Latest)**\n\n**Endpoint:** `GET /market/detail/merged`\n\n**What it does:** Returns the **latest trade price**, best bid/ask, and other snapshot details for a symbol.\n\n**Params:**\n- `symbol` (STRING, required) → e.g., `btcusdt` (lowercase, no dash)\n\n**Returns:** `tick.close` = last trade price, plus bid/ask/volumes.\n\n**n8n query mapping:**\n```txt\nsymbol = $fromAI('parameters0_Value', 'btcusdt', 'string')\n```\n\n**Notes:** Use lowercase symbols without `-` or `/` (e.g., `btcusdt`).",
+        "url": "https://api.huobi.pro/market/detail/merged",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `btcusdt`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -896,
+        -304
+      ],
+      "id": "b6d3e9ab-40a3-421e-b527-3204f4369ead",
+      "name": "Price (Latest)1"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Best Bid/Ask (Order Book Ticker)**\n\n**Endpoint:** `GET /market/detail/merged`\n\n**What it does:** Returns the best **bid/ask** snapshot along with the latest trade price for a symbol.\n\n**Params:**\n- `symbol` (STRING, required) → e.g., `btcusdt` (lowercase, no dash)\n\n**Returns:** `tick.bid` = `[price, qty]`, `tick.ask` = `[price, qty]`\n\n**n8n query mapping:**\n```txt\nsymbol = $fromAI('parameters0_Value', 'btcusdt', 'string')\n```\n\n**Notes:** Use lowercase symbols without `-` or `/` (e.g., `btcusdt`).",
+        "url": "https://api.huobi.pro/market/detail/merged",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `btcusdt`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -720,
+        -304
+      ],
+      "id": "7d197189-b736-4c4b-9c1d-8b0d9b7b9620",
+      "name": "Best Bid/Ask1"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Klines (Candles)**\n\n**Endpoint:** `GET /market/history/kline`\n\n**What it does:** Returns candlestick data for a symbol/interval.\n\n**Params:**\n- `symbol` (STRING, required) → lowercase (e.g., `btcusdt`)\n- `period` (ENUM, required — e.g., `1min,5min,15min,30min,60min,4hour,1day,1mon,1week,1year`)\n- `size` (INT, optional, default 20, max 2000)\n\n**Returns (array per candle):** `[id, open, close, low, high, amount, vol, count]`\n\n**n8n query mapping:**\n```txt\nsymbol = $fromAI('parameters0_Value', 'btcusdt', 'string')\nperiod = $fromAI('parameters1_Value', '15min', 'string')\nsize   = $fromAI('parameters2_Value', 20, 'number')\n```\n\n**Notes:**\n- Use lowercase symbols without `-` (e.g., `btcusdt`).\n- If no `size` provided, defaults to 20 latest candles.",
+        "url": "https://api.huobi.pro/market/history/kline",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `btcusdt`, 'string') }}"
+            },
+            {
+              "name": "period",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `15min`, 'string') }}"
+            },
+            {
+              "name": "size",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters2_Value', `20`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -528,
+        -304
+      ],
+      "id": "d8320be1-9c96-47e1-a87a-d7419470ec7f",
+      "name": "Klines (Candles)2"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Merged Ticker (Bid/Ask/Last)**\n\n**Endpoint:** `GET /market/detail/merged`\n**What it does:** Returns best bid/ask and last price for a symbol. Use Calculator to derive a midpoint `(bid+ask)/2` if you need an average.\n\n**Params:** `symbol` (STRING, required) → lowercase, no dash (e.g., `btcusdt`)\n\n**Returns (key fields):** `tick.bid`, `tick.ask`, `tick.close`, `tick.high`, `tick.low`, `tick.amount`, `tick.vol`, `ts`\n\n**n8n query mapping:**\n```txt\nsymbol = $fromAI('parameters0_Value', 'btcusdt', 'string')\n```\n\n**Notes:** HTX has no direct avg-price endpoint; this is the canonical ticker to pair with Calculator for midpoint.",
+        "url": "https://api.huobi.pro/market/detail/merged",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `btcusdt`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -336,
+        -304
+      ],
+      "id": "6b84bf70-ba4d-46ca-88b1-7ebd3577f704",
+      "name": "Average Price1"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Recent Trades**\n\n**Endpoint:** `GET /market/history/trade`\n**What it does:** Returns the most recent trades for a given symbol.\n\n**Params:**\n* `symbol` (STRING, required) → lowercase, no dash (e.g., `btcusdt`)\n* `size` (INT, default 100, max 2000 — we set default 100)\n\n**Returns:** array of trade batches → each batch has `data: [{id, price, amount, direction, ts}]`\n\n**n8n query mapping:**\n```txt\nsymbol = $fromAI('parameters0_Value', 'btcusdt', 'string')\nsize   = $fromAI('parameters1_Value', 100, 'number')\n```\n\n**Notes:** Unlike Binance, HTX nests trades inside `data` arrays per batch.",
+        "url": "https://api.huobi.pro/market/history/trade",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `btcusdt`, 'string') }}"
+            },
+            {
+              "name": "size",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `100`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -160,
+        -304
+      ],
+      "id": "1d1bba87-00fc-409b-bd93-d2de335ba847",
+      "name": "Recent Trades2"
+    },
+    {
+      "parameters": {
+        "toolDescription": "HTX Spot Market Data AI Agent that can call other tools",
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {
+          "systemMessage": "You are the **HTX Spot Market Data Agent**.\n\nYou have **HTTP request access** to the official **HTX REST API** (`https://api.huobi.pro`) to retrieve spot market data for any requested trading pair.\n\nYour job is to **fetch and present raw market data only**.  \nYou do **not** analyze, predict, or recommend.\n\n---\n\n## 🔗 Available Endpoints\n\n1. **Live Price (Aggregated Ticker)**  \n   `GET /market/detail/merged`  \n   • Returns best bid/ask, last trade price, volume, turnover.\n\n2. **24h Market Summary**  \n   `GET /market/detail`  \n   • 24h stats: open, high, low, close, volume, amount, count.\n\n3. **Market Depth**  \n   `GET /market/depth`  \n   • Order book bids/asks (step/levels configurable).\n\n4. **Full Order Book**  \n   `GET /market/fullMbp`  \n   • Complete market depth (up to 5000 levels).\n\n5. **Last Trade**  \n   `GET /market/trade`  \n   • Most recent single trade.\n\n6. **Recent Trades**  \n   `GET /market/history/trade`  \n   • List of recent trades.\n\n7. **Klines (Candlesticks)**  \n   `GET /market/history/kline`  \n   • Multiple intervals supported (`1s, 1min, 5min, 15min, 1day, 1week, 1mon, 1year`).  \n   • The AI automatically selects the correct interval (`seconds, minutes, days, weeks, months, years`).\n\n---\n\n## 📤 Output Format\n\nAlways respond in **clean, structured text** (Telegram HTML). Example:\n\n```\n\nBTC-USDT — HTX Spot Data\n\nPrice\n• Last: 58000.12\n• Change (24h): +2.4%\n\n24h Stats\n• Open: 56500 • High: 58500 • Low: 56200\n• Volume: 12,430 BTC • Turnover: 720M USDT\n\nOrder Book (Top 5)\n• Bids: \\[57990 x 0.5], \\[57980 x 1.2], …\n• Asks: \\[58010 x 0.8], \\[58020 x 1.5], …\n\nKlines (15m, latest 5)\n• O/H/L/C: 57800 / 58020 / 57750 / 57990\n\n```\n\n---\n\n## ⚠️ Rules\n\n* Always **call the correct HTX API endpoint**.  \n* Do **not** fabricate or calculate values (except simple formatting).  \n* Do **not** output raw JSON.  \n* Do **not** give advice, predictions, or strategies.  \n* If data is missing, output `N/A`.\n```\n\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2.2,
+      "position": [
+        -752,
+        -768
+      ],
+      "id": "700c968a-ab6f-422c-ac96-f36d22799573",
+      "name": "HTX AI Agent Tool"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Ticker (Latest & Stats)**\n\n**Endpoint:** `GET /v5/market/tickers`\n**What it does:** Returns the latest price, best bid/ask, 24h high/low, % change, and volume for a symbol.\n\n**Params:**\n* `category` (STRING, required) → `spot`\n* `symbol` (STRING, required) → e.g., BTCUSDT\n\n**Returns:** `{symbol, lastPrice, bid1Price, bid1Size, ask1Price, ask1Size, highPrice24h, lowPrice24h, volume24h, turnover24h}`\n\n**n8n query mapping:**\n```txt\ncategory = 'spot'\nsymbol   = $fromAI('symbol', 'BTCUSDT', 'string')\n```\n\n**Notes:** Bybit has no `/avgPrice`; derive midpoint `(bid1Price + ask1Price) / 2` in the Calculator node if needed.",
+        "url": "https://api.bybit.com/v5/market/tickers",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "category",
+              "value": "spot"
+            },
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('symbol', `BTCUSDT`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -400,
+        512
+      ],
+      "id": "fb6a5752-ce5b-4ce4-a81f-b439e442e876",
+      "name": "Ticker (Latest & Stats)"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "eada9d9c-3a0f-4231-8cac-5350e0c86862",
+      "name": "OpenAI Chat Model4",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        -1248,
+        304
+      ],
+      "typeVersion": 1.2,
+      "credentials": {
+        "openAiApi": {
+          "id": "yUizd8t0sD5wMYVG",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -1120,
+        336
+      ],
+      "id": "214001d4-7535-4d86-978f-b1921db6ccea",
+      "name": "Simple Memory4"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        -32,
+        528
+      ],
+      "id": "c2f940ca-bae2-4a3e-8311-0ffdff81fe98",
+      "name": "Calculator3"
+    },
+    {
+      "parameters": {
+        "description": "### 🏷 Tool: **Think**\n\n**Purpose:**\n\n* Lightweight **reasoning helper**.\n* Lets the AI Agent process intermediate logic, format outputs, or decide how to combine multiple API results before sending the final report.\n* Does not fetch data itself.\n\n**Use cases:**\n\n* Clean/reshape JSON from Binance endpoints\n* Extract only the needed fields (e.g., `lastPrice`, `volume`)\n* Help prepare data for Telegram message formatting\n\n**n8n setup notes:**\n\n* No API call, just an **AI Tool** node.\n* Connect upstream API results → Think → Report Agent."
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1.1,
+      "position": [
+        128,
+        528
+      ],
+      "id": "05d0d872-a19d-4e19-a1e7-f97e55bc877e",
+      "name": "Think3"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **24h Stats (Ticker)**\n\n**Endpoint:** `GET /v5/market/tickers`\n**What it does:** Returns latest price and 24h stats for a Spot symbol: last price, best bid/ask, 24h high/low, 24h change %, turnover and volume.\n\n**Params:**\n\n* `category` (STRING, required) → `spot`\n* `symbol` (STRING, optional but recommended) → e.g., BTCUSDT\n\n**Returns:** Bybit ticker fields such as `lastPrice`, `bid1Price`, `ask1Price`, `highPrice24h`, `lowPrice24h`, `price24hPcnt`, `turnover24h`, `volume24h`.\n\n**n8n query mapping:**\n\n```txt\ncategory = 'spot'\nsymbol   = $fromAI('symbol', 'BTCUSDT', 'string')\n```",
+        "url": "https://api.bybit.com/v5/market/tickers",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "category",
+              "value": "spot"
+            },
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('symbol', `BTCUSDT`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -1328,
+        528
+      ],
+      "id": "64238f8a-0017-4c44-a322-1a5260e9091c",
+      "name": "24h Stats2"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Order Book Depth**\n\n**Endpoint:** `GET /v5/market/orderbook`\n**What it does:** Returns order book bids/asks up to `limit` for a symbol.\n\n**Params:**\n\n* `category` (STRING, required) → `spot`\n* `symbol` (STRING, required) → e.g., BTCUSDT\n* `limit` (INT, optional; default 25; max 5000)\n\n**Returns:** bid/ask arrays with price and size.\n\n**n8n query mapping:**\n\n```txt\ncategory = 'spot'\nsymbol   = $fromAI('symbol', 'BTCUSDT', 'string')\nlimit    = $fromAI('limit', 100, 'number')\n```",
+        "url": "https://api.bybit.com/v5/market/orderbook",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "category",
+              "value": "spot"
+            },
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('symbol', `BTCUSDT`, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('limit', `100`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -1136,
+        528
+      ],
+      "id": "3a838f48-daba-4ac9-a8ce-28a06d3dcc68",
+      "name": "Order Book Depth3"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Price (Latest)**\n\n**Endpoint:** `GET /v5/market/tickers`\n**What it does:** Returns the latest price and 24h stats for a symbol.\n\n**Params:**\n* `category` (STRING, required) → `spot`\n* `symbol` (STRING, required) → e.g., BTCUSDT\n\n**Returns:** includes lastPrice, bid1Price, ask1Price, highPrice24h, lowPrice24h, volume24h, etc.\n\n**n8n query mapping:**\n```txt\ncategory = 'spot'\nsymbol   = $fromAI('symbol', 'BTCUSDT', 'string')\n```",
+        "url": "https://api.bybit.com/v5/market/tickers",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "category",
+              "value": "spot"
+            },
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('symbol', `BTCUSDT`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -944,
+        528
+      ],
+      "id": "913f0690-b038-42ae-af9a-7f71ae736d31",
+      "name": "Price (Latest)2"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Best Bid/Ask (Book Ticker)**\n\n**Endpoint:** `GET /v5/market/orderbook`\n**What it does:** Returns the current order book. Using `limit=1` gives the **best bid/ask** (top of book).\n\n**Params:**\n* `category` (STRING, required) → `spot`\n* `symbol` (STRING, required) → e.g., BTCUSDT\n* `limit` (INT, optional, default 1)\n\n**Returns:** top of book with bid/ask price and size arrays.\n\n**n8n query mapping:**\n```txt\ncategory = 'spot'\nsymbol   = $fromAI('symbol', 'BTCUSDT', 'string')\nlimit    = 1\n```",
+        "url": "https://api.bybit.com/v5/market/orderbook",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "category",
+              "value": "spot"
+            },
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('symbol', `BTCUSDT`, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -768,
+        528
+      ],
+      "id": "62aaefb3-cc1a-4f4a-aeed-3059988c5bf7",
+      "name": "Best Bid/Ask2"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Klines (Candles)**\n\n**Endpoint:** `GET /v5/market/kline`\n**What it does:** Returns candlestick (OHLCV) bars for a spot symbol and interval.\n\n**Params:**\n* `category` (STRING, required) → `spot`\n* `symbol` (STRING, required) → e.g., BTCUSDT\n* `interval` (STRING, required) → supported: `1,3,5,15,30,60,120,240,360,720,D,W,M`\n* `limit` (INT, optional, default 20)\n* `start` (LONG, optional, ms timestamp)\n* `end` (LONG, optional, ms timestamp)\n\n**Returns (array per candle):** `[ startTime, open, high, low, close, volume, turnover ]`\n\n**n8n query mapping:**\n```txt\ncategory = 'spot'\nsymbol   = $fromAI('symbol', 'BTCUSDT', 'string')\ninterval = $fromAI('interval', '15', 'string')\nlimit    = $fromAI('limit', 20, 'number')\nstart    = $fromAI('start', '', 'number')\nend      = $fromAI('end', '', 'number')\n```",
+        "url": "https://api.bybit.com/v5/market/kline",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "category",
+              "value": "spot"
+            },
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('symbol', `BTCUSDT`, 'string') }}"
+            },
+            {
+              "name": "interval",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('interval', `15`, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('limit', `20`, 'number') }}"
+            },
+            {
+              "name": "start",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('start', ``, 'number') }}"
+            },
+            {
+              "name": "end",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('end', ``, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -576,
+        528
+      ],
+      "id": "5812c4b5-1232-4e7f-bc1d-641a4caca36c",
+      "name": "Klines (Candles)3"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Recent Trades**\n\n**Endpoint:** `GET /v5/market/recent-trade`\n**What it does:** Returns the most recent public trades for a given symbol.\n\n**Params:**\n* `category` (STRING, required) → `spot`\n* `symbol` (STRING, required) → e.g., BTCUSDT\n* `limit` (INT, optional, default 100, max 1000)\n\n**Returns:** array of trades `{execId, price, size, side, time}`.\n\n**n8n query mapping:**\n```txt\ncategory = 'spot'\nsymbol   = $fromAI('parameters0_Value', '', 'string')\nlimit    = $fromAI('parameters1_Value', 100, 'number')\n```",
+        "url": "https://api.bybit.com/v5/market/recent-trade",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "category",
+              "value": "spot"
+            },
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `100`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -224,
+        528
+      ],
+      "id": "12125066-db92-458f-a5d7-f14562a5c813",
+      "name": "Recent Trades3"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Bybit Spot Market Data AI Agent that can call other tools",
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {
+          "systemMessage": "You are the **Bybit Spot Market Data Agent**.\nYou have **HTTP GET** access to the official Bybit REST **v5** API to retrieve market data for any requested **Spot** trading pair.\nYour job is to **fetch and present data only** — no analysis, predictions, or advice.\n\n## API Access\n\n* Base URL: `https://api.bybit.com/v5`\n* Pair format: `BASEQUOTE` (uppercase, no separator), e.g. `BTCUSDT`.\n* Always include `category=spot` on market endpoints.\n* If a field or call fails, output `N/A` and continue.\n\n## Market Data Endpoints (Spot)\n\n1. **Latest price & 24h stats**\n   `GET /market/tickers?category=spot&symbol=BTCUSDT`\n   Returns last price, best bid/ask, 24h high/low, % change, turnover/volume.&#x20;\n\n2. **Order book depth**\n   `GET /market/orderbook?category=spot&symbol=BTCUSDT&limit=100`\n   Snapshot of bids/asks (Spot supports 1–200; default 1). Use `limit=1` to emulate Best Bid/Ask.&#x20;\n\n3. **Recent public trades**\n   `GET /market/recent-trade?category=spot&symbol=BTCUSDT&limit=60`\n   Most recent trades (Spot limit 1–60; default 60).&#x20;\n\n4. **Candlesticks (klines)**\n   `GET /market/kline?category=spot&symbol=BTCUSDT&interval=15&limit=200`\n   OHLCV candles. Use only these intervals to match other agents: **1, 15, 60, 240, D** (1min, 15min, 1h, 4h, 1day).&#x20;\n\n## Optional Utility Endpoints\n\n* **Server time**: `GET /market/time` → Bybit server timestamps (sec/nano).&#x20;\n* **Order price limit**: `GET /market/price-limit?category=spot&symbol=BTCUSDT` → current buy/sell limit prices (spot/derivatives).&#x20;\n\n## Output Format (Telegram text)\n\nStart with:\n\n```\nBTCUSDT — Bybit Spot Data\n```\n\nThen:\n\n```\nPrice\n• Last: {{lastPrice}}\n• Best Bid / Ask: {{bid1Price}} / {{ask1Price}}\n• Change (24h): {{price24hPcnt}}%\n\n24h Stats\n• High: {{highPrice24h}} • Low: {{lowPrice24h}}\n• Volume(24h): {{volume24h}} • Turnover(24h): {{turnover24h}}\n\nOrder Book (Top 5)\n• Bids: [price x size] …\n• Asks: [price x size] …\n\nCandles (latest N)\n• Interval: {{interval}} (O/H/L/C per candle)\n```\n\n## Rules\n\n* Call the correct **Bybit v5 Spot** endpoint for each request.\n* Do not fabricate values or provide analysis/sentiment.\n* Do not dump raw JSON; present clean, readable values.\n* On error or missing fields, show `N/A` and continue.\n\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2.2,
+      "position": [
+        -1024,
+        144
+      ],
+      "id": "ead2fa46-04fa-48ea-8597-cfb37ed0415f",
+      "name": "Bybit Spot Market Data AI Agent Tool"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Average Price (via Ticker)**\n\n**Endpoint:** `GET /api/v1/market/orderbook/level1`\n**What it does:** Returns the **latest market data** for a symbol, including last trade price, best bid/ask, size, and time.\n\n**Params:**\n* `symbol` (STRING, required — e.g., `BTC-USDT`)\n\n**Returns:** `{ \"symbol\":\"BTC-USDT\",\"bestBid\":\"...\",\"bestAsk\":\"...\",\"price\":\"...\",\"size\":\"...\",\"time\":... }`\n\n**n8n query mapping:**\n```txt\nsymbol = $fromAI('parameters0_Value', 'BTC-USDT', 'string')\n```\n\n**Notes:** KuCoin does not provide a rolling `avgPrice` endpoint like Binance. Use this for **real-time average proxy** via bid/ask spread and last price.",
+        "url": "https://api.kucoin.com/api/v1/market/orderbook/level1",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `BTC-USDT`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1072,
+        -672
+      ],
+      "id": "1f0b366e-eedc-4db5-8a98-66c607a270da",
+      "name": "Average Price (via Ticker)"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "bdeb731f-af9e-4aab-8622-4012abe8d2a4",
+      "name": "OpenAI Chat Model5",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        16,
+        -912
+      ],
+      "typeVersion": 1.2,
+      "credentials": {
+        "openAiApi": {
+          "id": "yUizd8t0sD5wMYVG",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        192,
+        -912
+      ],
+      "id": "d18fe94d-a81d-418b-91e2-4fed14e3ab2f",
+      "name": "Simple Memory5"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        1440,
+        -672
+      ],
+      "id": "5b77f44c-5ad8-4c94-9989-8cac8455501e",
+      "name": "Calculator4"
+    },
+    {
+      "parameters": {
+        "description": "### 🏷 Tool: **Think**\n\n**Purpose:**\n\n* Lightweight **reasoning helper**.\n* Lets the AI Agent process intermediate logic, format outputs, or decide how to combine multiple API results before sending the final report.\n* Does not fetch data itself.\n\n**Use cases:**\n\n* Clean/reshape JSON from Binance endpoints\n* Extract only the needed fields (e.g., `lastPrice`, `volume`)\n* Help prepare data for Telegram message formatting\n\n**n8n setup notes:**\n\n* No API call, just an **AI Tool** node.\n* Connect upstream API results → Think → Report Agent."
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1.1,
+      "position": [
+        1568,
+        -672
+      ],
+      "id": "670997e1-011a-48e7-81b8-644509c36299",
+      "name": "Think4"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **24h Stats**\n\n**Endpoint:** `GET /api/v1/market/stats`\n**What it does:** Returns the **24-hour stats** for a given trading pair: open, high, low, close, last, change %, base volume, quote volume.\n\n**Params:**\n* `symbol` (STRING, required) → KuCoin pair format with dash, e.g. `BTC-USDT`\n\n**Returns:** `time, symbol, buy, sell, changeRate, changePrice, high, low, vol, volValue, last, averagePrice, takerFeeRate, makerFeeRate, takerCoefficient, makerCoefficient`\n\n**n8n query mapping:**\n```txt\nsymbol = $fromAI('parameters0_Value', 'BTC-USDT', 'string')\n```\n\n**Notes:**\n* This endpoint provides the **24h rolling window stats**.\n* For metadata (min/max order sizes, increments), use `/api/v2/symbols/{symbol}`.",
+        "url": "https://api.kucoin.com/api/v1/market/stats",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `BTC-USDT`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        96,
+        -672
+      ],
+      "id": "71ac6573-c127-44dc-8548-9e2f75e55b0e",
+      "name": "24h Stats3"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Order Book Depth**\n\n**Endpoint:** `GET /api/v1/market/orderbook/{level}`\n**What it does:** Returns **order book** bids/asks for a KuCoin symbol.\n\n**Levels (choose via `level`):**\n* `level2_20` → top 20 levels\n* `level2_100` → top 100 levels (default)\n* `level2_1` → best bid/ask (book ticker equivalent)\n\n**Params:**\n* `level`  (STRING, required) → one of `level2_20`, `level2_100`, `level2_1` (we default `level2_100`)\n* `symbol` (STRING, required) → KuCoin pair with dash, e.g. `BTC-USDT`\n\n**Returns:** `time, sequence, bids: [[price, size], ...], asks: [[price, size], ...]`\n\n**n8n query mapping:**\n```txt\nlevel  = $fromAI('level', 'level2_100', 'string')\nsymbol = $fromAI('parameters0_Value', 'BTC-USDT', 'string')\n```\n\n**Notes:**\n* For **best bid/ask only**, set `level = level2_1`.\n* If you need deeper/full book snapshots, KuCoin also offers `/api/v3/market/orderbook/level2?symbol=...&depth=...`.",
+        "url": "={{ 'https://api.kucoin.com/api/v1/market/orderbook/' + $fromAI('level', `level2_100`, 'string') }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `BTC-USDT`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        304,
+        -656
+      ],
+      "id": "5461b47c-19d2-4fa7-ad79-e5d9e8b1ad65",
+      "name": "Order Book Depth4"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Price (Latest)**\n\n**Endpoint:** `GET /api/v1/market/orderbook/level1`\n**What it does:** Returns the **latest price** and **best bid/ask** for a KuCoin symbol.\n\n**Params:**\n* `symbol` (STRING, required) → KuCoin format with dash, e.g. `BTC-USDT`\n\n**Returns:** fields such as `time`, `symbol`, `price` (last), `bestBid`, `bestBidSize`, `bestAsk`, `bestAskSize`.\n\n**n8n query mapping:**\n```txt\nsymbol = $fromAI('parameters0_Value', 'BTC-USDT', 'string')\n```\n\n**Notes:** Use this for quick latest price + spread snapshot. For full 24h stats, use `/api/v1/market/stats`.",
+        "url": "https://api.kucoin.com/api/v1/market/orderbook/level1",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `BTC-USDT`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        512,
+        -672
+      ],
+      "id": "ce540ca7-48f2-4976-8da8-0a6715221b43",
+      "name": "Price (Latest)3"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Best Bid/Ask (Book Ticker)**\n\n**Endpoint:** `GET /api/v1/market/orderbook/level1`\n**What it does:** Returns the **best bid/ask** and the **latest price** for a KuCoin symbol.\n\n**Params:**\n* `symbol` (STRING, required) → KuCoin format with dash, e.g. `BTC-USDT`\n\n**Returns:** fields such as `time`, `symbol`, `bestBid`, `bestBidSize`, `bestAsk`, `bestAskSize`, `price` (last).\n\n**n8n query mapping:**\n```txt\nsymbol = $fromAI('parameters0_Value', 'BTC-USDT', 'string')\n```\n\n**Notes:** Use for quick spread snapshot. For full book depth, use `/api/v1/market/orderbook/level2_X`.",
+        "url": "https://api.kucoin.com/api/v1/market/orderbook/level1",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `BTC-USDT`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        704,
+        -672
+      ],
+      "id": "5b95332e-f974-454b-afc6-8ec13a8e71a7",
+      "name": "Best Bid/Ask3"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Klines (Candles)**\n\n**Endpoint:** `GET /api/v1/market/candles`\n**What it does:** Retrieve candlestick bars for a KuCoin symbol and interval.\n\n**Params:**\n* `symbol` (STRING, required — e.g., `BTC-USDT`)\n* `type` (ENUM, required — e.g., `1min,3min,5min,15min,30min,1hour,2hour,4hour,6hour,8hour,12hour,1day,1week,1month`)\n* `startAt` (LONG, optional — start time in seconds)\n* `endAt` (LONG, optional — end time in seconds)\n\n**Returns (array per candle):** `[ time, open, close, high, low, volume, turnover ]`\n\n**n8n query mapping:**\n```txt\nsymbol  = $fromAI('parameters0_Value', 'BTC-USDT', 'string')\ntype    = $fromAI('parameters1_Value', '15min', 'string')\nstartAt = $fromAI('parameters2_Value', '', 'number')\nendAt   = $fromAI('parameters3_Value', '', 'number')\n```\n\n**Notes:** Without `startAt` and `endAt`, returns the most recent candles.",
+        "url": "https://api.kucoin.com/api/v1/market/candles",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `BTC-USDT`, 'string') }}"
+            },
+            {
+              "name": "type",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `15min`, 'string') }}"
+            },
+            {
+              "name": "startAt",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters2_Value', ``, 'number') }}"
+            },
+            {
+              "name": "endAt",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters3_Value', ``, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        880,
+        -672
+      ],
+      "id": "8fd9c087-4f62-4979-b0ad-ef2ccf147f6f",
+      "name": "Klines (Candles)4"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Recent Trades**\n\n**Endpoint:** `GET /api/v1/market/histories`\n**What it does:** Returns the **most recent public trades** for a KuCoin symbol.\n\n**Params:**\n* `symbol` (STRING, required) → e.g., `BTC-USDT`\n* `limit`  (INT, optional; default 100)\n\n**Returns:** array of trades like `{ sequence, price, size, side, time }` (newest first).\n\n**n8n query mapping:**\n```txt\nsymbol = $fromAI('parameters0_Value', 'BTC-USDT', 'string')\nlimit  = $fromAI('parameters1_Value', 100, 'number')\n```",
+        "url": "https://api.kucoin.com/api/v1/market/histories",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `BTC-USDT`, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `100`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1264,
+        -672
+      ],
+      "id": "b8976bb6-0630-4f03-b98f-9628e1628523",
+      "name": "Recent Trades4"
+    },
+    {
+      "parameters": {
+        "toolDescription": "KuCoin Spot Market Data AI Agent that can call other tools",
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {
+          "systemMessage": "You are the KuCoin Spot Market Data Agent.\n\nYou have HTTP request access to the official KuCoin Spot REST API to retrieve market data for any requested trading pair.\nYour job is to fetch and present data only. You do not analyze, predict, or recommend.\n\n---\n\nAPI Access\n- Base endpoint: https://api.kucoin.com\n- All requests are HTTP GET\n- Responses are JSON\n- Parameters use query strings (e.g., ?symbol=BTC-USDT&limit=100)\n- Symbol format: uppercase with dash (e.g., BTC-USDT)\n\n---\n\nAvailable Market Data Endpoints\n1. Order Book Depth\n   GET /api/v1/market/orderbook/level2_100?symbol=BTC-USDT\n   - Returns top bids/asks (100 entries).\n   - Variants: level2_20, level2_100, level2_1\n\n2. Recent Trades\n   GET /api/v1/market/histories?symbol=BTC-USDT\n   - Most recent trades (default limit = 100)\n\n3. Aggregate Ticker (24h Stats)\n   GET /api/v1/market/stats?symbol=BTC-USDT\n   - Includes open, high, low, close, last, volume, % change\n\n4. Kline / Candlestick Data\n   GET /api/v1/market/candles?symbol=BTC-USDT&type=15min&limit=20\n   - Intervals: 1min,3min,5min,15min,30min,1h,2h,4h,6h,8h,12h,1d,1w\n   - Default limit = 100, max = 1500\n\n5. Ticker — Latest Symbol Price\n   GET /api/v1/market/orderbook/level1?symbol=BTC-USDT\n   - Best bid/ask and last trade price\n\n---\n\nUtility Tools\n- Calculator → perform math (spreads, % changes, normalizations)\n- Think → reshape JSON, select fields, prepare outputs\n\n---\n\nOutput Format\nStart every response with:\n[SYMBOL] — KuCoin Spot Data\n\nThen group logically:\nPrice\n• Last: {{lastPrice}}\n• Avg: {{avgPrice}}\n• Change (24h): {{pctChange}}%\n\n24h Stats\n• Open: {{open}} • High: {{high}} • Low: {{low}} • Close: {{close}}\n• Volume: {{baseVol}} • Quote Vol: {{quoteVol}}\n\nOrder Book (Top 5)\n• Bids: [price x qty] …\n• Asks: [price x qty] …\n\nKlines (latest 20)\n• Interval: {{interval}} (O/H/L/C per candle)\n\n---\n\nRules\n- Always call the correct KuCoin API endpoint.\n- Do not fabricate or calculate values yourself.\n- Do not provide trading advice, sentiment, or predictions.\n- Do not output raw JSON; present clean, human-readable values.\n- If data is missing or request fails, show N/A.\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2.2,
+      "position": [
+        208,
+        -1168
+      ],
+      "id": "361b8714-5576-46bd-8e82-d68955209ffc",
+      "name": "KuCoin Spot Market Data AI Agent Tool"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "3eab8871-e590-4c92-88a1-e3e48406b3f4",
+      "name": "OpenAI Chat Model6",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        -2144,
+        -1040
+      ],
+      "typeVersion": 1.2,
+      "credentials": {
+        "openAiApi": {
+          "id": "yUizd8t0sD5wMYVG",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        -1952,
+        -1040
+      ],
+      "id": "6790d848-273a-4430-8e6f-eb8517c8d0b8",
+      "name": "Simple Memory6"
+    },
+    {
+      "parameters": {
+        "description": "### 🏷 Tool: **Think**\n\n**Purpose:**\n\n* Lightweight **reasoning helper**.\n* Lets the AI Agent process intermediate logic, format outputs, or decide how to combine multiple API results before sending the final report.\n* Does not fetch data itself.\n\n**Use cases:**\n\n* Clean/reshape JSON from Binance endpoints\n* Extract only the needed fields (e.g., `lastPrice`, `volume`)\n* Help prepare data for Telegram message formatting\n\n**n8n setup notes:**\n\n* No API call, just an **AI Tool** node.\n* Connect upstream API results → Think → Report Agent."
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1.1,
+      "position": [
+        -1296,
+        -752
+      ],
+      "id": "77b244f3-e783-42bb-9e1e-62c70478978b",
+      "name": "Think5"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **24h Stats**\n\n**Endpoint:** `GET /api/v3/ticker/24hr`\n**What it does:** 24-hour rolling window stats for a symbol: **open/high/low/last**, **volume**, **quoteVolume**, **% change**, etc.\n**Params:**\n\n* `symbol` (STRING, optional but we send it)\n  **Request weight:** `2` with one `symbol`; heavier without or with many symbols.\n  **Returns (FULL):** priceChange, priceChangePercent, weightedAvgPrice, openPrice, highPrice, lowPrice, lastPrice, volume, quoteVolume, openTime, closeTime, firstId, lastId, count.\n  **n8n query mapping:**\n\n```txt\nsymbol = $fromAI('parameters0_Value', '', 'string')\n```\n\n**Notes:** This is MEXC’s 24h rolling stats endpoint.",
+        "url": "https://api.mexc.com/api/v3/ticker/24hr",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -2368,
+        -752
+      ],
+      "id": "0a21e127-3253-4356-b861-a9e1e96df9fc",
+      "name": "24h Stats4"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Order Book Depth**\n\n**Endpoint:** `GET /api/v3/depth`\n**What it does:** Returns **order book** bids/asks up to `limit`.\n**Params:**\n\n* `symbol` (STRING, required)\n* `limit` (INT, default 100; max 5000; we default 100)\n  **Request weight:** varies by `limit` (1–100 → 5; 101–500 → 25; 501–1000 → 50; 1001–5000 → 250).\n  **Returns:** `lastUpdateId`, `bids: [[price, qty], ...]`, `asks: [[price, qty], ...]`\n  **n8n query mapping:**\n\n```txt\nsymbol = $fromAI('parameters0_Value', '', 'string')\nlimit  = $fromAI('parameters1_Value', 100, 'number')\n```\n\n**Notes:** If `limit > 5000`, only 5000 are returned.",
+        "url": "https://api.mexc.com/api/v3/depth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `100`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -2192,
+        -752
+      ],
+      "id": "c1fb1019-9562-4a8b-9536-6b805872d555",
+      "name": "Order Book Depth5"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Price (Latest)**\n\n**Endpoint:** `GET /api/v3/ticker/price`\n**What it does:** Returns the **latest trade price** for a symbol.\n**Params:** `symbol` (STRING, optional for all symbols; **we send it**)\n**Request weight:** `2` with `symbol` (otherwise `4`).\n**Returns:** `{\"symbol\":\"BTCUSDT\",\"price\":\"...\"}`\n**n8n query mapping:**\n\n```txt\nsymbol = $fromAI('parameters0_Value', '', 'string')\n```\n\n**Notes:** Use UPPERCASE symbols without `-` or `/` (e.g., `BTCUSDT`).",
+        "url": "https://api.mexc.com/api/v3/ticker/price",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -2000,
+        -752
+      ],
+      "id": "c618592f-1071-48ac-bcfc-2cd0318c8be6",
+      "name": "Price (Latest)4"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Best Bid/Ask (Book Ticker)**\n\n**Endpoint:** `GET /api/v3/ticker/bookTicker`\n**What it does:** Best **bid/ask** and sizes for the symbol.\n**Params:** `symbol` (optional; **we send it**)\n**Request weight:** `2` with `symbol`, `4` otherwise.\n**Returns:** `{\"symbol\":\"BTCUSDT\",\"bidPrice\":\"...\",\"bidQty\":\"...\",\"askPrice\":\"...\",\"askQty\":\"...\"}`\n**n8n query mapping:**\n\n```txt\nsymbol = $fromAI('parameters0_Value', '', 'string')\n```\n\n**Notes:** Great for quick spread snapshot.",
+        "url": "https://api.mexc.com/api/v3/ticker/bookTicker",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -1808,
+        -752
+      ],
+      "id": "df5ee06f-d993-45a9-ac42-a9d0756b4ab7",
+      "name": "Best Bid/Ask4"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Klines (Candles)**\n\n**Endpoint:** `GET /api/v3/klines`\n**What it does:** Candlestick bars for a symbol/interval.\n**Params:**\n\n* `symbol` (STRING, required)\n* `interval` (ENUM, required — e.g., `1m,3m,5m,15m,30m,1h,2h,4h,6h,8h,12h,1d,3d,1w,1M`)\n* `limit` (INT, default 500, max 1000 — **we set 20**)\n* `startTime`, `endTime` (optional)\n  **Request weight:** `1`.\n  **Returns (array per candle):** `[ openTime, open, high, low, close, volume, closeTime, quoteAssetVolume, numberOfTrades, takerBuyBaseVolume, takerBuyQuoteVolume ]`\n  **n8n query mapping:**\n\n```txt\nsymbol  = $fromAI('parameters0_Value', '', 'string')\ninterval= $fromAI('parameters1_Value', '15m', 'string')\nlimit   = $fromAI('parameters2_Value', 20, 'number')\n```\n\n**Notes:** Without `startTime/endTime`, returns most recent.",
+        "url": "https://api.mexc.com/api/v3/klines",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            },
+            {
+              "name": "interval",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `15m`, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters2_Value', `20`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -1632,
+        -752
+      ],
+      "id": "4117070a-9034-4fc0-9369-dfa852d1cc22",
+      "name": "Klines (Candles)5"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Recent Trades**\n\n**Endpoint:** `GET /api/v3/trades`\n**What it does:** Returns the **most recent public trades** for a symbol on MEXC.\n\n**Params:**\n* `symbol` (STRING, required)\n* `limit`  (INT, optional; default 100, max 1000)\n\n**Returns:** array of trades like `{ id, price, qty, quoteQty, time, isBuyerMaker, isBestMatch }`.\n\n**n8n query mapping:**\n```txt\nsymbol = $fromAI('parameters0_Value', '', 'string')\nlimit  = $fromAI('parameters1_Value', 100, 'number')\n```\n\n**Notes:** For older historical trades, use the exchange's historical endpoint if available.",
+        "url": "https://api.mexc.com/api/v3/trades",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "symbol",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `100`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        -1456,
+        -752
+      ],
+      "id": "f12f4f99-eba0-4825-874c-e013b579c0f7",
+      "name": "Recent Trades5"
+    },
+    {
+      "parameters": {
+        "toolDescription": "MEXC Spot Market Data AI Agent that can call other tools",
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {
+          "systemMessage": "You are the **MEXC Spot Market Data Agent**.\n\nYou have **HTTP request access** to the official **MEXC REST API** to retrieve market data for any requested Spot trading pair.\nYour role is to **fetch and present raw market data only**. You do **not** analyze, predict, or recommend.\n\n---\n\n## 🔗 API Access\n\n**Base endpoint (Spot API):**\n\n* `https://api.mexc.com`\n\n**Format rules:**\n\n* All requests are **HTTP GET**\n* Responses are **JSON**\n* Parameters use query strings (e.g., `?symbol=BTCUSDT&limit=100`)\n* `symbol` is always uppercase, no `/` or `-` (e.g., `BTCUSDT`)\n\n---\n\n## 📌 Available Market Data Endpoints\n\n1. **24h Stats**\n   `GET /api/v3/ticker/24hr?symbol=BTCUSDT`\n   • Returns 24h open, high, low, last, % change, volume, quote volume, etc.\n\n2. **Order Book Depth**\n   `GET /api/v3/depth?symbol=BTCUSDT&limit=100`\n   • Returns top bids/asks with quantities.\n\n3. **Latest Symbol Price**\n   `GET /api/v3/ticker/price?symbol=BTCUSDT`\n   • Returns the latest trade price.\n\n4. **Order Book Best Bid/Ask**\n   `GET /api/v3/ticker/bookTicker?symbol=BTCUSDT`\n   • Returns best bid/ask with sizes.\n\n5. **Kline / Candlestick Data**\n   `GET /api/v3/klines?symbol=BTCUSDT&interval=15m&limit=20`\n   • Returns OHLCV data for supported intervals.\n\n6. **Current Average Price**\n   `GET /api/v3/avgPrice?symbol=BTCUSDT`\n   • Returns rolling average price.\n\n7. **Recent Trades**\n   `GET /api/v3/trades?symbol=BTCUSDT&limit=100`\n   • Most recent trades (id, price, qty, time, isBuyerMaker, etc.).\n\n---\n\n## 🧩 Utility Tools\n\n* **Calculator** → Perform math (spreads, % changes, ratios).\n* **Think** → Lightweight reasoning helper for restructuring JSON, selecting fields, and preparing outputs.\n\n---\n\n## 📤 Output Format\n\n* Output must be **structured, clean, and human-readable**.\n* Group data logically (Price, 24h Stats, Order Book, Klines, Trades).\n* Do **not** output raw JSON.\n* Do **not** include HTML unless explicitly required by workflow.\n\n---\n\n## ⚠️ Rules\n\n* Always use the **correct API endpoint**.\n* Do **not fabricate values**.\n* Do **not provide trading advice or predictions**.\n* If data is missing or request fails, return `N/A`.\n\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2.2,
+      "position": [
+        -1936,
+        -1280
+      ],
+      "id": "8d608a16-951a-44e0-affc-593efc90949c",
+      "name": "MEXC Spot Market Data AI Agent Tool"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Average / Mark Price**\n\n**Endpoint:** `GET /api/v5/market/mark-price`\n**What it does:** Returns the **mark price** (reference fair price) for an instrument, which can serve as an 'average-like' indicator.\n\n**Params:**\n\n* `instType` (STRING, required) — e.g., `SPOT`\n* `instId` (STRING, required) — instrument ID (e.g., `BTC-USDT`)\n\n**Returns:** `[{ instType, instId, markPx, ts }]`\n\n**n8n query mapping:**\n\n```txt\ninstType = 'SPOT'\ninstId   = $fromAI('parameters0_Value', '', 'string')\n```\n\n**Notes:**\n* Binance’s `/avgPrice` gives a rolling average — OKX does not have this directly.\n* Use `markPx` as the closest equivalent (widely used as the fair price across markets).",
+        "url": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('URL', ``, 'string') }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "instType",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            },
+            {
+              "name": "instId",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        2016,
+        -1088
+      ],
+      "id": "15a45f44-2a76-4794-9b5d-125fd6cbac58",
+      "name": "Average / Mark Price"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "2d43f0e2-8dc6-4f59-bc0a-861082e08305",
+      "name": "OpenAI Chat Model7",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        1184,
+        -1280
+      ],
+      "typeVersion": 1.2,
+      "credentials": {
+        "openAiApi": {
+          "id": "yUizd8t0sD5wMYVG",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1344,
+        -1280
+      ],
+      "id": "353d7ee0-d659-40c2-bde1-d06efea8a813",
+      "name": "Simple Memory7"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        2320,
+        -1088
+      ],
+      "id": "1717c46b-723c-4488-9413-e1baea0077b6",
+      "name": "Calculator6"
+    },
+    {
+      "parameters": {
+        "description": "### 🏷 Tool: **Think**\n\n**Purpose:**\n\n* Lightweight **reasoning helper**.\n* Lets the AI Agent process intermediate logic, format outputs, or decide how to combine multiple API results before sending the final report.\n* Does not fetch data itself.\n\n**Use cases:**\n\n* Clean/reshape JSON from Binance endpoints\n* Extract only the needed fields (e.g., `lastPrice`, `volume`)\n* Help prepare data for Telegram message formatting\n\n**n8n setup notes:**\n\n* No API call, just an **AI Tool** node.\n* Connect upstream API results → Think → Report Agent."
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1.1,
+      "position": [
+        2464,
+        -1088
+      ],
+      "id": "dd4d07c4-6a86-456b-ab6f-d380c00a4f34",
+      "name": "Think6"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **24h Stats (Ticker)**\n\n**Endpoint:** `GET /api/v5/market/ticker`\n**What it does:** Returns 24h stats for a Spot instrument: **last**, **open24h**, **high24h**, **low24h**, **vol24h (base)**, **volCcy24h (quote)**, **price change %**, etc.\n\n**Params:**\n* `instId` (STRING, required) — instrument id, e.g. `BTC-USDT`\n\n**n8n query mapping:**\n\n```txt\ninstId = $fromAI('parameters0_Value', '', 'string')\n```\n\n**Notes:** `instId` must be UPPERCASE with a hyphen, e.g. `ETH-USDT`.",
+        "url": "https://www.okx.com/api/v5/market/ticker",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "instId",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1168,
+        -1104
+      ],
+      "id": "c52d1c9e-9440-46fe-bcff-69c10b83834c",
+      "name": "24h Stats5"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Order Book Depth**\n\n**Endpoint:** `GET /api/v5/market/books`\n**What it does:** Returns order book **bids/asks** up to `sz` (default 25).\n\n**Params:**\n\n* `instId` (STRING, required) — instrument id, e.g. `BTC-USDT`\n* `sz` (INT, optional; default 25; max 400)\n\n**Returns:** `asks`, `bids`, `ts`\n\n**n8n query mapping:**\n\n```txt\ninstId = $fromAI('parameters0_Value', '', 'string')\nsz     = $fromAI('parameters1_Value', 25, 'number')\n```\n\n**Notes:** Unlike Binance `limit`, OKX uses `sz` with max 400.",
+        "url": "https://www.okx.com/api/v5/market/books",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "instId",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            },
+            {
+              "name": "sz",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `25`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1344,
+        -1104
+      ],
+      "id": "2b787fc6-24ba-4e7a-828a-5d96e0edc004",
+      "name": "Order Book Depth6"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Price (Latest)**\n\n**Endpoint:** `GET /api/v5/market/ticker`\n**What it does:** Returns the **latest trade price** for an instrument.\n\n**Params:**\n* `instId` (STRING, required) — instrument id, e.g. `BTC-USDT`\n\n**Returns:** `{ \"instId\":\"BTC-USDT\", \"last\":\"...\", \"askPx\":\"...\", \"bidPx\":\"...\", \"high24h\":\"...\", \"low24h\":\"...\" }`\n\n**n8n query mapping:**\n\n```txt\ninstId = $fromAI('parameters0_Value', '', 'string')\n```\n\n**Notes:** OKX always requires `instId` with dash format (e.g., `BTC-USDT`).",
+        "url": "https://www.okx.com/api/v5/market/ticker",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "instId",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1520,
+        -1104
+      ],
+      "id": "03fa630e-9d01-4671-99b5-3a82ef307718",
+      "name": "Price (Latest)5"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Best Bid/Ask (Book Ticker)**\n\n**Endpoint:** `GET /api/v5/market/ticker`\n**What it does:** Provides the **best bid/ask** prices and sizes for an instrument.\n\n**Params:**\n* `instId` (STRING, required) — instrument id, e.g. `BTC-USDT`\n\n**Returns:** `{ \"instId\":\"BTC-USDT\", \"bidPx\":\"...\", \"bidSz\":\"...\", \"askPx\":\"...\", \"askSz\":\"...\" }`\n\n**n8n query mapping:**\n\n```txt\ninstId = $fromAI('parameters0_Value', '', 'string')\n```\n\n**Notes:** Unlike Binance, OKX’s `ticker` response includes last price, open24h, high24h, low24h, and **best bid/ask** in the same payload.",
+        "url": "https://www.okx.com/api/v5/market/ticker",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "instId",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1680,
+        -1104
+      ],
+      "id": "5865bda0-579b-4ec9-a7b9-00fa72fb8b3d",
+      "name": "Best Bid/Ask5"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Klines (Candles)**\n\n**Endpoint:** `GET /api/v5/market/candles`\n**What it does:** Returns candlestick (OHLCV) bars for an instrument.\n\n**Params:**\n\n* `instId` (STRING, required) — instrument ID (e.g., `BTC-USDT`)\n* `bar` (ENUM, required) — interval, e.g. `1m,3m,5m,15m,30m,1H,2H,4H,6H,12H,1D,1W,1M`\n* `limit` (INT, optional, default 100; max 100)\n* `after` / `before` (optional, pagination)\n\n**Returns (array per candle):** `[ ts, o, h, l, c, vol, volCcy, volCcyQuote, confirm ]`\n\n**n8n query mapping:**\n\n```txt\ninstId = $fromAI('parameters0_Value', '', 'string')\nbar    = $fromAI('parameters1_Value', '15m', 'string')\nlimit  = $fromAI('parameters2_Value', 20, 'number')\n```\n\n**Notes:**\n* Binance uses `symbol`/`interval`; OKX uses `instId`/`bar`.\n* `limit` max is **100** (not 1000 like Binance).",
+        "url": "https://www.okx.com/api/v5/market/candles",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "instId",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            },
+            {
+              "name": "bar",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `15m`, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters2_Value', `20`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1840,
+        -1104
+      ],
+      "id": "99d19c0b-53d3-4c8c-ba5c-3a3ab0de6c33",
+      "name": "Klines (Candles)6"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Recent Trades**\n\n**Endpoint:** `GET /api/v5/market/trades`\n**What it does:** Returns the **most recent public trades** for an OKX Spot instrument.\n\n**Params:**\n* `instId` (STRING, required) — instrument id, e.g. `BTC-USDT`\n* `limit`  (INT, optional; default 100, max 100)\n\n**Returns:** array of trades like `{ tradeId, px, sz, side, ts, instId }`.\n\n**n8n query mapping:**\n```txt\ninstId = $fromAI('parameters0_Value', '', 'string')\nlimit  = $fromAI('parameters1_Value', 100, 'number')\n```\n\n**Notes:** `instId` must be UPPERCASE with a hyphen (e.g., `ETH-USDT`).",
+        "url": "https://www.okx.com/api/v5/market/trades",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "instId",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', ``, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `100`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        2192,
+        -1088
+      ],
+      "id": "5c84864d-1804-4ec9-a810-ec52bda2f996",
+      "name": "Recent Trades6"
+    },
+    {
+      "parameters": {
+        "toolDescription": "OKX Spot Market Data AI Agent that can call other tools",
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {
+          "systemMessage": "You are the **OKX Spot Market Data Agent**.\n\nYou have **HTTP request access** to the official OKX REST API to retrieve market data for any requested OKX Spot trading pair.\nYour job is to **fetch and present data only**. You do **not** analyze, predict, or recommend.\n\n---\n\n## 🔗 API Access\n\n**Base endpoint (default):**\n\n* [https://www.okx.com](https://www.okx.com)\n\n**Format rules:**\n\n* All requests are **HTTP GET**\n* Responses are **JSON**\n* Parameters use query strings (e.g., `?instId=BTC-USDT`)\n* `instId` is always uppercase with `-` (e.g., `BTC-USDT`)\n\n---\n\n## 📌 Available Market Data Endpoints\n\n1. **Tickers (All or Single)**\n   `GET /api/v5/market/tickers?instType=SPOT`\n   `GET /api/v5/market/ticker?instId=BTC-USDT`\n   • Real-time ticker for one or all Spot instruments.\n\n2. **Order Book Depth**\n   `GET /api/v5/market/books?instId=BTC-USDT&sz=50`\n   • Returns bids/asks with depth (size configurable).\n\n3. **Recent Trades**\n   `GET /api/v5/market/trades?instId=BTC-USDT&limit=100`\n   • Most recent trades for a symbol.\n\n4. **Candlestick / Kline Data**\n   `GET /api/v5/market/candles?instId=BTC-USDT&bar=15m&limit=100`\n   • Supported intervals: `1m, 3m, 5m, 15m, 30m, 1H, 2H, 4H, 6H, 12H, 1D, 1W, 1M`\n   • Default limit = 100 (max 100).\n\n5. **24h Stats (Ticker Details)**\n   `GET /api/v5/market/ticker?instId=BTC-USDT`\n   • Includes open, high, low, last, volume, % change, etc.\n\n6. **Average Price (Mark Price)**\n   `GET /api/v5/market/mark-price?instType=SPOT&instId=BTC-USDT`\n   • Use `markPx` as the fair/average reference price.\n\n---\n\n## 🧩 Utility Tools\n\n* **Calculator** → Perform math inside the workflow (spreads, % changes, etc).\n* **Think** → Lightweight reasoning helper to reshape JSON, select fields, and prepare outputs.\n\n---\n\n## 📤 Output Format\n\nRespond with **clean, structured text** (no HTML required). Example grouping:\n\n```\nBTC-USDT — OKX Spot Data\n\nPrice\n• Last: 58000.12\n• Avg (Mark): 57980.55\n• Change (24h): +2.4%\n\n24h Stats\n• Open: 56500 • High: 58500 • Low: 56200 • Volume: 12,430 BTC • Quote Vol: 720M USDT\n\nOrder Book (Top 5)\n• Bids: [57990 x 0.5], [57980 x 1.2], …\n• Asks: [58010 x 0.8], [58020 x 1.5], …\n\nKlines (15m, latest 5)\n• O/H/L/C: 57800 / 58020 / 57750 / 57990\n```\n\n---\n\n## ⚠️ Rules\n\n* Always **call the correct OKX API endpoint** for the requested data.\n* Do **not** fabricate or calculate values yourself (except simple formatting).\n* Do **not** provide trading advice, sentiment, or predictions.\n* Do **not** output raw JSON; always present clean, human-readable values.\n* If data is missing or request fails, show `N/A`.\n\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2.2,
+      "position": [
+        1408,
+        -1504
+      ],
+      "id": "7ce8318e-c769-46ac-9139-434a16a4aec9",
+      "name": "OKX Spot Market Data AI Agent Tool"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **24h Stats (Ticker)**\n\n**Endpoint:** `GET /spot/tickers`\n**What it does:** Returns latest ticker stats for a currency pair.\n**Params:**\n\n* `currency_pair` (STRING, required) → format: `BASE_QUOTE` (e.g., BTC_USDT)\n\n**Returns:** `last, lowest_ask, highest_bid, change_percentage, base_volume, quote_volume`\n\n**n8n query mapping:**\n\n```txt\ncurrency_pair = $fromAI('currency_pair', 'BTC_USDT', 'string')\n```",
+        "url": "https://api.gateio.ws/api/v4/spot/tickers",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "currency_pair",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('currency_pair', `BTC_USDT`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1552,
+        0
+      ],
+      "id": "7d5a79da-c62d-4d7d-ad34-16de4aaf2f58",
+      "name": "24h Stats (Ticker)1"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "e52a80f8-a402-4bfd-9710-5f26aae922f9",
+      "name": "OpenAI Chat Model8",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        848,
+        -144
+      ],
+      "typeVersion": 1.2,
+      "credentials": {
+        "openAiApi": {
+          "id": "yUizd8t0sD5wMYVG",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        1024,
+        -144
+      ],
+      "id": "f0cc7270-d2bb-4e4c-a66a-5bf555d1b8fb",
+      "name": "Simple Memory8"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        1888,
+        0
+      ],
+      "id": "a1752fd3-c6d3-498b-8d6b-c64d2060e94f",
+      "name": "Calculator7"
+    },
+    {
+      "parameters": {
+        "description": "### 🏷 Tool: **Think**\n\n**Purpose:**\n\n* Lightweight **reasoning helper**.\n* Lets the AI Agent process intermediate logic, format outputs, or decide how to combine multiple API results before sending the final report.\n* Does not fetch data itself.\n\n**Use cases:**\n\n* Clean/reshape JSON from Binance endpoints\n* Extract only the needed fields (e.g., `lastPrice`, `volume`)\n* Help prepare data for Telegram message formatting\n\n**n8n setup notes:**\n\n* No API call, just an **AI Tool** node.\n* Connect upstream API results → Think → Report Agent."
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1.1,
+      "position": [
+        2048,
+        0
+      ],
+      "id": "c902fddf-4971-4d19-a789-9f53b6ff2914",
+      "name": "Think7"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **24h Stats**\n\n**Endpoint:** `GET /spot/tickers`\n**What it does:** 24-hour stats for a currency pair: **last price, open/high/low, change %, volume, best bid/ask**.\n**Params:**\n\n* `currency_pair` (STRING, required) → format: `BASE_QUOTE` (e.g., BTC_USDT)\n\n**Returns:** `{ \"currency_pair\": \"BTC_USDT\", \"last\": \"...\", \"lowest_ask\": \"...\", \"highest_bid\": \"...\", \"change_percentage\": \"...\", \"base_volume\": \"...\", \"quote_volume\": \"...\", \"high_24h\": \"...\", \"low_24h\": \"...\" }`\n\n**n8n query mapping:**\n\n```txt\ncurrency_pair = $fromAI('currency_pair', 'BTC_USDT', 'string')\n```",
+        "url": "https://api.gateio.ws/api/v4/spot/tickers",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "currency_pair",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('currency_pair', `BTC_USDT`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        624,
+        0
+      ],
+      "id": "aa8887e1-f31d-40ed-889f-4509e26e46fc",
+      "name": "24h Stats6"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Order Book Depth**\n\n**Endpoint:** `GET /spot/order_book`\n**What it does:** Returns order book bids/asks up to `limit`.\n**Params:**\n\n* `currency_pair` (STRING, required) → format: `BASE_QUOTE` (e.g., BTC_USDT)\n* `limit` (INT, default 100; max 5000; **we default 100**)\n* `with_id` (BOOL, optional; if true, includes order book update ID)\n\n**Returns:** `{ \"id\":12345, \"bids\":[[price, amount],...], \"asks\":[[price, amount],...] }`\n\n**n8n query mapping:**\n\n```txt\ncurrency_pair = $fromAI('currency_pair', 'BTC_USDT', 'string')\nlimit         = $fromAI('limit', 100, 'number')\n```",
+        "url": "https://api.gateio.ws/api/v4/spot/order_book",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "currency_pair",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('currency_pair', `BTC_USDT`, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('limit', `100`, 'number') }}"
+            },
+            {
+              "name": "with_id",
+              "value": "true"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        800,
+        0
+      ],
+      "id": "a42c747e-0590-4c60-be2f-f97cc9e07412",
+      "name": "Order Book Depth7"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Price (Latest)**\n\n**Endpoint:** `GET /spot/tickers`\n**What it does:** Returns the **latest trade price** for a currency pair (field: `last`).\n**Params:**\n\n* `currency_pair` (STRING, required) → format: `BASE_QUOTE` (e.g., BTC_USDT)\n\n**Returns:** `{ \"currency_pair\":\"BTC_USDT\", \"last\":\"...\", \"lowest_ask\":\"...\", \"highest_bid\":\"...\", \"base_volume\":\"...\", \"quote_volume\":\"...\" }`\n\n**n8n query mapping:**\n\n```txt\ncurrency_pair = $fromAI('currency_pair', 'BTC_USDT', 'string')\n```",
+        "url": "https://api.gateio.ws/api/v4/spot/tickers",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "currency_pair",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('currency_pair', `BTC_USDT`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        976,
+        0
+      ],
+      "id": "6fe7c826-ae09-4988-af84-d083c08f4f53",
+      "name": "Price (Latest)6"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Best Bid/Ask (Book Ticker)**\n\n**Endpoint:** `GET /spot/order_book`\n**What it does:** Returns the best **bid/ask** with sizes for a currency pair.\n**Params:**\n\n* `currency_pair` (STRING, required) → format: `BASE_QUOTE` (e.g., BTC_USDT)\n* `limit` (INT, fixed = 1)\n\n**Returns:** `{ \"bids\": [[price, amount]], \"asks\": [[price, amount]], \"id\": ... }`\n\n**n8n query mapping:**\n\n```txt\ncurrency_pair = $fromAI('currency_pair', 'BTC_USDT', 'string')\nlimit         = 1\n```",
+        "url": "https://api.gateio.ws/api/v4/spot/order_book",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "currency_pair",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('currency_pair', `BTC_USDT`, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "1"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1168,
+        0
+      ],
+      "id": "d44eb789-765b-44ec-8f41-387b707bfa68",
+      "name": "Best Bid/Ask6"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Klines (Candles)**\n\n**Endpoint:** `GET /spot/candlesticks`\n**What it does:** OHLCV candlesticks for a currency pair/interval.\n**Params:**\n\n* `currency_pair` (STRING, required) → format: `BASE_QUOTE` (e.g., BTC_USDT)\n* `interval` (STRING, required) → e.g., `1m,5m,15m,30m,1h,4h,1d,1w` (others may be supported)\n* `limit` (INT, optional) → number of candles to return (**we default 20**)\n* `from`, `to` (INT, optional) → unix seconds range\n\n**Returns (array per candle):** `[ t, v, c, h, l, o ]` (time, volume, close, high, low, open)\n\n**n8n query mapping:**\n\n```txt\ncurrency_pair = $fromAI('currency_pair', 'BTC_USDT', 'string')\ninterval      = $fromAI('interval', '15m', 'string')\nlimit         = $fromAI('limit', 20, 'number')\n```",
+        "url": "https://api.gateio.ws/api/v4/spot/candlesticks",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "currency_pair",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('currency_pair', `BTC_USDT`, 'string') }}"
+            },
+            {
+              "name": "interval",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('interval', `15m`, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('limit', `20`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1344,
+        0
+      ],
+      "id": "92a6b5c1-7f68-430a-8eef-00fb7da79a65",
+      "name": "Klines (Candles)7"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Recent Trades**\n\n**Endpoint:** `GET /spot/trades`\n**What it does:** Returns the **most recent public trades** for a currency pair.\n**Params:**\n\n* `currency_pair` (STRING, required) → format: `BASE_QUOTE` (e.g., BTC_USDT)\n* `limit` (INT, optional) → number of trades to return (**we default 100**)\n\n**Returns (array):** `[ { \"id\":123, \"create_time_ms\":\"...\", \"side\":\"buy|sell\", \"price\":\"...\", \"amount\":\"...\" }, ... ]`\n\n**n8n query mapping:**\n\n```txt\ncurrency_pair = $fromAI('currency_pair', 'BTC_USDT', 'string')\nlimit         = $fromAI('limit', 100, 'number')\n```",
+        "url": "https://api.gateio.ws/api/v4/spot/trades",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "currency_pair",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('currency_pair', `BTC_USDT`, 'string') }}"
+            },
+            {
+              "name": "limit",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('limit', `100`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1744,
+        0
+      ],
+      "id": "42403327-0839-4817-af1c-df0d54a092f6",
+      "name": "Recent Trades7"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Gate Spot Market Data AI Agent that can call other tools",
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {
+          "systemMessage": "You are the **Gate Spot Market Data Agent**.\n\nYou have **HTTP GET** access to the official Gate.io REST **v4** API to retrieve market data for any requested **Spot** currency pair.\nYour job is to **fetch and present data only** — no analysis, predictions, or advice.\n\n---\n\n## 🔗 API Access\n\n**Base URL:** `https://api.gateio.ws/api/v4`\n**Pair format:** `BASE_QUOTE` (underscore, uppercase), e.g. `BTC_USDT`.\n\n**General rules**\n\n* All requests are **GET** and return **JSON**.\n* Query params go in the URL, e.g. `?currency_pair=BTC_USDT&limit=100`.\n* If a field or call fails, output `N/A` and continue.\n\n---\n\n## 📌 Market Data Endpoints (Spot)\n\n1. **Latest Price & 24h Stats**\n   `GET /spot/tickers?currency_pair=BTC_USDT`\n   Returns last price, open/high/low, 24h change %, base/quote volume, best bid/ask and more.\n\n2. **Order Book Depth**\n   `GET /spot/order_book?currency_pair=BTC_USDT&limit=100&with_id=true`\n   Returns bids/asks up to the limit (top-of-book first). Use `limit=1` to emulate **Best Bid/Ask**.\n\n3. **Recent Trades**\n   `GET /spot/trades?currency_pair=BTC_USDT&limit=100`\n   Most recent public trades (price, size, time, side).\n\n4. **Candlesticks (Klines)**\n   `GET /spot/candlesticks?currency_pair=BTC_USDT&interval=15m&limit=20`\n   OHLCV candles. Supported intervals: `10s, 1m, 5m, 15m, 30m, 1h, 4h, 1d, 1w`. Use common ones like `1m, 5m, 15m, 1h, 4h, 1d`.\n\n---\n\n### Notes\n\n* Gate.io does not expose a separate “average price” endpoint. If needed, compute midpoint `(best_bid + best_ask) / 2` in the **Calculator** node.\n* No separate “bookTicker” endpoint; use **Order Book** with `limit=1` for best bid/ask.\n\n---\n\n## 🧩 Utility Tools\n\n* **Calculator** — optional simple math (spread, midpoint, % change).\n* **Think** — reshape JSON and format the final Telegram message.\n\n---\n\n## 📤 Output Format (Telegram text)\n\nStart with:\n\n```\nBTC_USDT — Gate Spot Data\n```\n\nThen group logically:\n\n```\nPrice\n• Last: 26250\n• Best Bid / Ask: 26245 / 26255\n• Change (24h): -1.2%\n\n24h Stats\n• Open: 26500 • High: 27000 • Low: 26000 • Close: 26250\n• Volume: 1,234 BTC • Quote Vol: 32,000,000 USDT\n\nOrder Book (Top 5)\n• Bids: [26245 x 0.5], [26244 x 1.2] …\n• Asks: [26255 x 0.8], [26256 x 1.5] …\n\nCandles (latest 20)\n• Interval: 15m (O/H/L/C per candle)\n```\n\n---\n\n## ⚠️ Rules\n\n* Always call the correct **Gate.io v4 Spot endpoint** for the requested data.\n* Do not fabricate values, run technical analysis, or sentiment.\n* Do not dump raw JSON — always return clean, readable values.\n* On error or missing fields, show `N/A` and continue.\n\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        -384
+      ],
+      "id": "ffad9716-62bc-4078-9b7f-c4fbba519562",
+      "name": "Gate Spot Market Data AI Agent Tool"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Average Price (VWAP)**\n\n**Endpoint:** `GET /v1/trades/ticks`\n**What it does:** Retrieves recent trades and can be used to calculate a rolling **average price (VWAP)** for a market.\n\n**Params:**\n* `market` (STRING, required) — e.g., `KRW-BTC`\n* `count` (INT, optional) — number of trades to fetch (default 30, max 200)\n\n**Returns:** Array of trades (`trade_price`, `trade_volume`, `timestamp`, etc.).\n\n**n8n mapping:**\n```txt\nmarket = $fromAI('parameters0_Value', 'KRW-BTC', 'string')\ncount  = $fromAI('parameters1_Value', 30, 'number')\n```\n\n**Notes:** Upbit doesn’t provide a direct avgPrice endpoint. Instead, VWAP or mean trade price is derived from the latest trades.",
+        "url": "https://api.upbit.com/v1/trades/ticks",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "market",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `KRW-BTC`, 'string') }}"
+            },
+            {
+              "name": "count",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `30`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        2832,
+        -400
+      ],
+      "id": "0757e343-8a06-4153-8f6c-f7751663d7dc",
+      "name": "Average Price (VWAP)"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Dynamic Klines (All Timeframes in One Node)**\n\n**Endpoint (dynamic):** `GET /v1/candles/{seconds|minutes/{unit}|days|weeks|months|years}`\n**What it does:** Returns OHLCV candles for the requested Upbit market using **one node**. The path segment is chosen automatically from your `tf` (timeframe) input.\n\n**Accepted `tf` examples:**\n- `1s`, `30s` → **seconds**\n- `1m`, `3m`, `5m`, `10m`, `15m`, `30m`, `60m`, `240m` → **minutes/{unit}**\n- `1h`, `2h`, `4h` → mapped to **minutes/60**, **minutes/120**, **minutes/240**\n- `1d` → **days**\n- `1w` → **weeks**\n- `1M` → **months**\n- `1y` → **years**\n\n**Params:**\n* `market` (STRING, required) — e.g., `KRW-BTC`, `USDT-ETH`\n* `tf` (STRING, required) — timeframe token as above (default `15m`)\n* `limit` (INT, optional, default 100, max 200) — number of candles\n* `to` (STRING, optional) — ISO8601 end time (exclusive), e.g. `2025-09-15T09:00:00Z`\n\n**Notes:**\n* Upbit hours are done via minutes (e.g., `1h` → `minutes/60`).\n* Seconds endpoint exists but is limited in historical depth.\n* Response is an array of candles with fields like `opening_price`, `high_price`, `low_price`, `trade_price` (close), `candle_acc_trade_volume`, `timestamp`.\n",
+        "url": "={{ (function(){\n  const base = 'https://api.upbit.com/v1/candles/';\n  const tf = $fromAI('tf', '15m', 'string');\n  const m = (tf || '').trim();\n\n  // seconds (e.g., 1s, 30s)\n  if (/^\\d+s$/i.test(m)) {\n    return base + 'seconds';\n  }\n\n  // minutes direct (e.g., 1m, 3m, 5m, 10m, 15m, 30m, 60m, 240m)\n  const minMatch = m.match(/^(\\d+)m$/i);\n  if (minMatch) {\n    const unit = minMatch[1];\n    return base + 'minutes/' + unit;\n  }\n\n  // hours mapped to minutes\n  const hourMap = { '1':'60', '2':'120', '4':'240' };\n  const hrMatch = m.match(/^(\\d+)h$/i);\n  if (hrMatch && hourMap[hrMatch[1]]) {\n    return base + 'minutes/' + hourMap[hrMatch[1]];\n  }\n\n  // days, weeks, months, years\n  if (/^\\d+d$/i.test(m)) return base + 'days';\n  if (/^\\d+w$/i.test(m)) return base + 'weeks';\n  if (/^\\d+M$/i.test(m)) return base + 'months';\n  if (/^\\d+y$/i.test(m)) return base + 'years';\n\n  // fallback: 15m\n  return base + 'minutes/15';\n})() }}",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "market",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('market', `KRW-BTC`, 'string') }}"
+            },
+            {
+              "name": "count",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('limit', `100`, 'number') }}"
+            },
+            {
+              "name": "to",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('to', ``, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        2672,
+        -384
+      ],
+      "id": "ca0c8b10-54aa-46ac-b3b0-ea87203028c9",
+      "name": "Upbit Klines (Dynamic)"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "9b158d3b-4ad2-4c42-9907-5c3589000fdf",
+      "name": "OpenAI Chat Model9",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        2208,
+        -544
+      ],
+      "typeVersion": 1.2,
+      "credentials": {
+        "openAiApi": {
+          "id": "yUizd8t0sD5wMYVG",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        2400,
+        -544
+      ],
+      "id": "df797858-4b58-4d66-9f21-fb0c5ab0a152",
+      "name": "Simple Memory9"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        3184,
+        -400
+      ],
+      "id": "a3154b2c-4095-4bd4-975e-4b1b461ce684",
+      "name": "Calculator8"
+    },
+    {
+      "parameters": {
+        "description": "### 🏷 Tool: **Think**\n\n**Purpose:**\n\n* Lightweight **reasoning helper**.\n* Lets the AI Agent process intermediate logic, format outputs, or decide how to combine multiple API results before sending the final report.\n* Does not fetch data itself.\n\n**Use cases:**\n\n* Clean/reshape JSON from Binance endpoints\n* Extract only the needed fields (e.g., `lastPrice`, `volume`)\n* Help prepare data for Telegram message formatting\n\n**n8n setup notes:**\n\n* No API call, just an **AI Tool** node.\n* Connect upstream API results → Think → Report Agent."
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1.1,
+      "position": [
+        3328,
+        -416
+      ],
+      "id": "00a921a6-c1ac-4c50-89c6-7d8ce4228226",
+      "name": "Think8"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **24h Stats**\n\n**Endpoint:** `GET /v1/ticker`\n**What it does:** Real-time price and 24-hour rolling stats for one or more markets: **open/high/low/last**, **24h change**, **base/quote volume**, etc.\n\n**Params:**\n\n* `markets` (STRING, required) — one or more market codes, comma-separated. Examples: `KRW-BTC`, `USDT-BTC`, `KRW-BTC,KRW-ETH`.\n\n**Returns (key fields):** `trade_price` (last), `opening_price`, `high_price`, `low_price`, `signed_change_rate`, `signed_change_price`, `acc_trade_volume_24h`, `acc_trade_price_24h`, `prev_closing_price`, `timestamp`, etc.\n\n**n8n query mapping:**\n\n```txt\nmarkets = $fromAI('parameters0_Value', 'KRW-BTC', 'string')\n```\n\n**Notes:**\n* Market codes are uppercase with a hyphen (e.g., `KRW-BTC`).\n* Multiple markets are supported via comma separation.",
+        "url": "https://api.upbit.com/v1/ticker",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "markets",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `KRW-BTC`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1984,
+        -368
+      ],
+      "id": "478faac4-a5ad-4d5a-ba77-5c7d3ec5a0f0",
+      "name": "24h Stats7"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Order Book Depth**\n\n**Endpoint:** `GET /v1/orderbook`\n**What it does:** Returns **order book** with bids/asks and total sizes.\n\n**Params:**\n\n* `markets` (STRING, required) — market code, e.g., `KRW-BTC`.\n\n**Returns:** `orderbook_units` array with `ask_price`, `bid_price`, `ask_size`, `bid_size` (top ~15 levels by default).\n\n**n8n query mapping:**\n\n```txt\nmarkets = $fromAI('parameters0_Value', 'KRW-BTC', 'string')\n```\n\n**Notes:**\n* Upbit does not support arbitrary `limit` — it returns a fixed number of levels (usually 15).\n* Market codes use hyphen format (e.g., `KRW-BTC`).",
+        "url": "https://api.upbit.com/v1/orderbook",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "markets",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `KRW-BTC`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        2160,
+        -368
+      ],
+      "id": "a8833bdd-ff82-464f-a3b1-49851beff1bc",
+      "name": "Order Book Depth8"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Price (Latest)**\n\n**Endpoint:** `GET /v1/ticker`\n**What it does:** Returns the **latest trade price** (and more stats) for a market.\n\n**Params:**\n* `markets` (STRING, required) — market code (e.g., `KRW-BTC`, `USDT-ETH`).\n\n**Returns:** Array with objects including `trade_price` (last price), `opening_price`, `high_price`, `low_price`, `prev_closing_price`, `acc_trade_volume`, `acc_trade_price`, `change`, `signed_change_rate`, etc.\n\n**n8n query mapping:**\n\n```txt\nmarkets = $fromAI('parameters0_Value', 'KRW-BTC', 'string')\n```\n\n**Notes:**\n* Always use **hyphenated format** (e.g., `KRW-BTC`).\n* Returns **more than just price** — can also be used instead of 24h stats.",
+        "url": "https://api.upbit.com/v1/ticker",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "markets",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `KRW-BTC`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        2336,
+        -384
+      ],
+      "id": "913237e8-3b43-4135-94a4-db179ed3cfaf",
+      "name": "Price (Latest)7"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Best Bid/Ask (Orderbook Snapshot)**\n\n**Endpoint:** `GET /v1/orderbook`\n**What it does:** Returns the **best bid/ask** and order book depth for the given market.\n\n**Params:**\n* `markets` (STRING, required) — market code (e.g., `KRW-BTC`, `USDT-ETH`).\n\n**Returns:** Array with objects:\n* `orderbook_units`: [{ \"ask_price\", \"bid_price\", \"ask_size\", \"bid_size\" }, ...]\n* Top unit = **best bid/ask**.\n\n**n8n query mapping:**\n\n```txt\nmarkets = $fromAI('parameters0_Value', 'KRW-BTC', 'string')\n```\n\n**Notes:**\n* Use the first element of `orderbook_units` for **best bid/ask**.\n* You can expand to show more levels if needed.",
+        "url": "https://api.upbit.com/v1/orderbook",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "markets",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `KRW-BTC`, 'string') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        2528,
+        -384
+      ],
+      "id": "57d3cc55-7225-4bc1-a905-253fe107c58f",
+      "name": "Best Bid/Ask7"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Recent Trades**\n\n**Endpoint:** `GET /v1/trades/ticks`\n**What it does:** Fetches the **most recent trades** for a market.\n\n**Params:**\n\n* `market` (STRING, required) — Upbit market ID (e.g., `KRW-BTC`, `USDT-ETH`).\n* `count` (INT, optional, default 30, max 200) — number of trades to fetch.\n\n**Returns:** array of trade objects `{trade_price, trade_volume, ask_bid, timestamp, sequential_id, ...}`\n\n**n8n query mapping:**\n\n```txt\nmarket = $fromAI('parameters0_Value', 'KRW-BTC', 'string')\ncount  = $fromAI('parameters1_Value', 30, 'number')\n```",
+        "url": "https://api.upbit.com/v1/trades/ticks",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "market",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters0_Value', `KRW-BTC`, 'string') }}"
+            },
+            {
+              "name": "count",
+              "value": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('parameters1_Value', `30`, 'number') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        3024,
+        -400
+      ],
+      "id": "a5409e8f-a185-4439-abcc-b3af01fece96",
+      "name": "Recent Trades8"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Upbit Spot Market Data AI Agent that can call other tools",
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {
+          "systemMessage": "You are the **Upbit Spot Market Data Agent**.\n\nYou have **HTTP GET access** to the official Upbit REST API and must **fetch and present market data only** for requested Upbit Spot markets. You do **not** analyze, predict, or recommend.\n\n#### API base\n\n* `https://api.upbit.com`\n\n#### Request/format rules\n\n* All requests are **HTTP GET** returning **JSON**.\n* Query strings for params (e.g., `?markets=KRW-BTC`).\n* Market codes are uppercase with a hyphen (e.g., `KRW-BTC`, `USDT-ETH`).\n* If anything fails or is missing, show `N/A`.\n\n#### Available endpoints\n\n1. **Market list** – `GET /v1/market/all`\n2. **Tickers (price + 24h stats)** – `GET /v1/ticker?markets=KRW-BTC[,…]`\n3. **Tickers by quote** – `GET /v1/tickers?quote_currencies=KRW|BTC|USDT`\n4. **Order book** – `GET /v1/orderbook?markets=KRW-BTC`\n5. **Supported levels** – `GET /v1/orderbook/supported_levels?markets=KRW-BTC`\n6. **Recent trades** – `GET /v1/trades/ticks?market=KRW-BTC&count=100`\n7. **Candles (dynamic)** – `GET /v1/candles/{seconds | minutes/{unit} | days | weeks | months | years}`\n\n#### Dynamic candles (single tool, auto-select path)\n\n* Input `tf` decides the path:\n\n  * `1s, 30s` → `seconds`\n  * `1m,3m,5m,10m,15m,30m,60m,240m` → `minutes/{unit}`\n  * `1h,2h,4h` → map to `minutes/60`, `minutes/120`, `minutes/240`\n  * `1d` → `days`, `1w` → `weeks`, `1M` → `months`, `1y` → `years`\n* Common params: `market` (e.g., `KRW-BTC`), `count`/`limit` (default 100, max 200), optional `to` ISO8601.\n\n#### Utility tools\n\n* **Calculator**: spreads, % changes, lightweight math.\n* **Think**: reshape/clean JSON, select fields, prepare text.\n\n#### Output style\n\nReturn **clean, structured text** (no HTML). Example:\n\n```\nKRW-BTC — Upbit Spot Data\n\nPrice\n• Last: 95,800,000 KRW\n• Change (24h): +2.3%\n\n24h Stats\n• Open: 93,500,000 • High: 96,200,000 • Low: 92,800,000 • Volume: 12,345 BTC\n\nOrder Book (Top 5)\n• Bids: [95,790,000 x 0.50], [95,780,000 x 1.20], …\n• Asks: [95,810,000 x 0.80], [95,820,000 x 1.50], …\n\nKlines (15m, latest 5)\n• O/H/L/C: 95,700,000 / 95,820,000 / 95,600,000 / 95,800,000\n```\n\n#### Rules\n\n* Always call the correct Upbit endpoint for the user’s request.\n* Never fabricate values (formatting/math only).\n* No strategies, advice, or sentiment.\n* Prefer concise, human-readable values over raw JSON.\n\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2.2,
+      "position": [
+        2400,
+        -768
+      ],
+      "id": "016ba7a6-4946-454d-ba29-7151713d4356",
+      "name": "Upbit Spot Market Data AI Agent Tool"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Average Price (Derived)**\n\n**Endpoint:** `GET /products/{product_id}/book?level=1`\n**What it does:** Coinbase does not provide a direct average price endpoint. This tool fetches the **best bid/ask** and you can derive a midpoint average `(bid + ask)/2`.\n**Params:**\n\n* `product_id` (STRING, required) → format: `BASE-QUOTE` (e.g., BTC-USD)\n* `level` (INT, fixed = 1)\n\n**Returns:** `{ \"bids\": [[price, size]], \"asks\": [[price, size]] }`\n\n**n8n query mapping:**\n\n```txt\nproduct_id = $fromAI('product_id', 'BTC-USD', 'string')\nlevel      = 1\n```\n\n**Notes:** Use Calculator node to compute midpoint from bid/ask.\n\nhttps://api.exchange.coinbase.com/products/{{ $fromAI('product_id','BTC-USD','string') }}/book",
+        "url": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('URL', `BTC-USD`, 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        3072,
+        656
+      ],
+      "id": "f3e6b835-1b26-4f84-b45a-401f83ed1a0a",
+      "name": "Average Price (Derived)"
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "value": "gpt-4.1-mini",
+          "mode": "list",
+          "cachedResultName": "gpt-4.1-mini"
+        },
+        "options": {}
+      },
+      "id": "f7d4d679-7aad-4b46-bfc0-a9a24eb62960",
+      "name": "OpenAI Chat Model10",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "position": [
+        2256,
+        464
+      ],
+      "typeVersion": 1.2,
+      "credentials": {
+        "openAiApi": {
+          "id": "yUizd8t0sD5wMYVG",
+          "name": "OpenAi account"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [
+        2432,
+        464
+      ],
+      "id": "73c4c959-69c8-4f58-99ae-8a1920b0192d",
+      "name": "Simple Memory10"
+    },
+    {
+      "parameters": {},
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        3392,
+        656
+      ],
+      "id": "c4fff0c2-4e61-449b-b2f8-6106643202e5",
+      "name": "Calculator9"
+    },
+    {
+      "parameters": {
+        "description": "### 🏷 Tool: **Think**\n\n**Purpose:**\n\n* Lightweight **reasoning helper**.\n* Lets the AI Agent process intermediate logic, format outputs, or decide how to combine multiple API results before sending the final report.\n* Does not fetch data itself.\n\n**Use cases:**\n\n* Clean/reshape JSON from Binance endpoints\n* Extract only the needed fields (e.g., `lastPrice`, `volume`)\n* Help prepare data for Telegram message formatting\n\n**n8n setup notes:**\n\n* No API call, just an **AI Tool** node.\n* Connect upstream API results → Think → Report Agent."
+      },
+      "type": "@n8n/n8n-nodes-langchain.toolThink",
+      "typeVersion": 1.1,
+      "position": [
+        3504,
+        656
+      ],
+      "id": "99ec14ff-dc82-40e0-b3cd-a803f8dcabab",
+      "name": "Think9"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **24h Stats**\n\n**Endpoint:** `GET /products/{product_id}/stats`\n**What it does:** 24-hour rolling window stats: **open/high/low/last**, **volume**.\n**Params:**\n\n* `product_id` (STRING, required) → format: `BASE-QUOTE` (e.g., BTC-USD)\n\n**Returns (FULL):** open, high, low, last, volume (24h).\n**n8n query mapping:**\n\n```txt\nproduct_id = $fromAI('product_id', 'BTC-USD', 'string')\n```\n\nhttps://api.exchange.coinbase.com/products/{{$fromAI('product_id','BTC-USD','string')}}/stats",
+        "url": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('URL', `BTC-USD`, 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        2368,
+        672
+      ],
+      "id": "d9720320-7e53-48d8-a0ab-8d8cec269dbd",
+      "name": "24h Stats8"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Order Book Depth**\n\n**Endpoint:** `GET /products/{product_id}/book?level=2`\n**What it does:** Returns the **order book** for a product. Use `level=1` for best bid/ask (L1) or `level=2` for aggregated depth (L2).\n**Params:**\n\n* `product_id` (STRING, required) → format `BASE-QUOTE` (e.g., BTC-USD)\n* `level` (INT, optional) → `1` (top of book) or `2` (aggregated depth). Default: `2`.\n\n**Returns (L2):** `bids: [[price, size], ...]`, `asks: [[price, size], ...]` plus metadata.\n**n8n query mapping:**\n\n```txt\nproduct_id = $fromAI('product_id', 'BTC-USD', 'string')\nlevel      = $fromAI('level', 2, 'number')\n```\n\nhttps://api.exchange.coinbase.com/products/{{ $fromAI('product_id','BTC-USD','string') }}/book",
+        "url": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('URL', `BTC-USD`, 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        2496,
+        672
+      ],
+      "id": "acfec1d8-ee56-490a-9340-5598c848e2f7",
+      "name": "Order Book Depth9"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Price (Latest)**\n\n**Endpoint:** `GET /products/{product_id}/ticker`\n**What it does:** Returns the **latest trade price** plus best bid/ask and volume for a product.\n**Params:**\n\n* `product_id` (STRING, required) → format: `BASE-QUOTE` (e.g., BTC-USD)\n\n**Returns:** `{ \"trade_id\": ..., \"price\": \"...\", \"size\": \"...\", \"bid\": \"...\", \"ask\": \"...\", \"volume\": \"...\", \"time\": \"...\" }`\n\n**n8n query mapping:**\n\n```txt\nproduct_id = $fromAI('product_id', 'BTC-USD', 'string')\n```\nhttps://api.exchange.coinbase.com/products/{{ $fromAI('product_id','BTC-USD','string') }}/ticker",
+        "url": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('URL', `BTC-USD`, 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        2640,
+        672
+      ],
+      "id": "f990b334-cb00-4b34-a597-3a0021de35cb",
+      "name": "Price (Latest)8"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Best Bid/Ask (Book Ticker)**\n\n**Endpoint:** `GET /products/{product_id}/book?level=1`\n**What it does:** Returns the best **bid/ask** with sizes for the product.\n**Params:**\n\n* `product_id` (STRING, required) → format: `BASE-QUOTE` (e.g., BTC-USD)\n* `level` (INT, fixed = 1)\n\n**Returns:** `{ \"bids\": [[price, size]], \"asks\": [[price, size]], \"sequence\": ... }`\n\n**n8n query mapping:**\n\n```txt\nproduct_id = $fromAI('product_id', 'BTC-USD', 'string')\nlevel      = 1\n```\n\nhttps://api.exchange.coinbase.com/products/{{ $fromAI('product_id','BTC-USD','string') }}/book",
+        "url": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('URL', `BTC-USD`, 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        2768,
+        672
+      ],
+      "id": "306ec24a-7f62-4870-a4d5-85f6e03159f9",
+      "name": "Best Bid/Ask8"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Klines (Candles)**\n\n**Endpoint:** `GET /products/{product_id}/candles`\n**What it does:** Candlestick (OHLCV) data for a product.\n**Params:**\n\n* `product_id` (STRING, required) → format: `BASE-QUOTE` (e.g., BTC-USD)\n* `granularity` (INT, required) → supported: 60, 300, 900, 3600, 21600, 86400 (1m, 5m, 15m, 1h, 6h, 1d)\n* `start`, `end` (ISO8601, optional)\n\n**Returns (array per candle):** `[ time, low, high, open, close, volume ]`\n\n**n8n query mapping:**\n\n```txt\nproduct_id  = $fromAI('product_id', 'BTC-USD', 'string')\ngranularity = $fromAI('granularity', 900, 'number')   # 900 = 15m default\n```\nhttps://api.exchange.coinbase.com/products/{{ $fromAI('product_id','BTC-USD','string') }}/candles",
+        "url": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('URL', `BTC-USD`, 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        2912,
+        672
+      ],
+      "id": "7ab0f21a-67ef-4900-84db-8ebe3c964056",
+      "name": "Klines (Candles)8"
+    },
+    {
+      "parameters": {
+        "toolDescription": "### 🏷 Tool: **Recent Trades**\n\n**Endpoint:** `GET /products/{product_id}/trades`\n**What it does:** Returns the **most recent trades** for a Coinbase product.\n**Params:**\n\n* `product_id` (STRING, required) → format: `BASE-QUOTE` (e.g., BTC-USD)\n* `limit` (INT, optional) → number of trades to return (defaults ~100)\n\n**Returns (array):** `[ { \"time\": \"...\", \"trade_id\": 123, \"price\": \"...\", \"size\": \"...\", \"side\": \"buy|sell\" }, ... ]`\n\n**n8n query mapping:**\n\n```txt\nproduct_id = $fromAI('product_id', 'BTC-USD', 'string')\nlimit      = $fromAI('limit', 100, 'number')\n```\n\n**Notes:** Endpoint supports pagination via `before` / `after` cursors if you later need historical pages.\n\nhttps://api.exchange.coinbase.com/products/{{ $fromAI('product_id','BTC-USD','string') }}/trades",
+        "url": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('URL', `BTC-USD`, 'string') }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        3248,
+        656
+      ],
+      "id": "8336b586-8b73-4bfd-9dfc-0c1ce1484a3e",
+      "name": "Recent Trades9"
+    },
+    {
+      "parameters": {
+        "toolDescription": "Coinbase Spot Market Data AI Agent that can call other tools",
+        "text": "={{ /*n8n-auto-generated-fromAI-override*/ $fromAI('Prompt__User_Message_', ``, 'string') }}",
+        "options": {
+          "systemMessage": "You are the **Coinbase Spot Market Data Agent**.\n\nYou have **HTTP request access** to the official **Coinbase Exchange REST API** to retrieve market data for any requested Coinbase spot trading pair.\nYour job is to **fetch and present data only**. You do **not** analyze, predict, or recommend.\n\n---\n\n## 🔗 API Access\n\n**Base endpoint (primary default):** `https://api.exchange.coinbase.com` :contentReference[oaicite:0]{index=0}  \n**Format rules:**\n- All requests are **HTTP GET**; responses are **JSON**:contentReference[oaicite:1]{index=1}.\n- `product_id` format is `BASE-QUOTE` (e.g., `BTC-USD`) and **lowercase URLs** are required:contentReference[oaicite:2]{index=2}.\n- Public endpoints don’t require auth; private endpoints do (signed headers):contentReference[oaicite:3]{index=3}.\n- Public REST rate limit: **10 rps per IP** (burst up to 15). Private: **15 rps per profile** (burst up to 30). Exceeding returns **429**:contentReference[oaicite:4]{index=4}.\n\n---\n\n## 📌 Available Market Data Endpoints (Public REST)\n\n1) **Order Book Depth**  \n   `GET /products/{product_id}/book?level=2` → top-of-book depth (aggregated):contentReference[oaicite:5]{index=5}  \n   - Use `level=1` for best bid/ask only (L1).  \n   - Use `level=2` for aggregated L2 (recommended over L3 via REST).\n\n2) **Recent Trades**  \n   `GET /products/{product_id}/trades` → latest trades (price, size, side, time):contentReference[oaicite:6]{index=6}  \n\n3) **Aggregate Trades**  \n   **Not provided** as a REST endpoint on Coinbase. Use **Recent Trades** or simulate aggregation in workflow (optional).  \n\n4) **Klines / Candles**  \n   `GET /products/{product_id}/candles?granularity=900` → OHLCV arrays:contentReference[oaicite:7]{index=7}  \n   - Supported `granularity` (seconds): **60, 300, 900, 3600, 21600, 86400** (1m, 5m, 15m, 1h, 6h, 1d).\n\n5) **Current Average Price**  \n   **Not provided** as a REST endpoint. Optionally derive from midpoint of `/book?level=1` ( (bid+ask)/2 ) in your Calculator node.\n\n6) **24h Ticker Price Change Statistics**  \n   `GET /products/{product_id}/stats` → 24h open, high, low, last, volume:contentReference[oaicite:8]{index=8}  \n\n7) **Latest Symbol Price**  \n   `GET /products/{product_id}/ticker` → last price, best bid/ask, volume:contentReference[oaicite:9]{index=9}  \n\n8) **Order Book Best Bid/Ask**  \n   `GET /products/{product_id}/book?level=1` → best bid/ask only (L1):contentReference[oaicite:10]{index=10}  \n\n---\n\n## 🧩 Utility Tools\n- **Calculator** → simple math (e.g., spread, pct change, midpoint).  \n- **Think** → reshape JSON, pick fields, and prepare the Telegram HTML.\n\n---\n\n## 📤 Output Format (Telegram HTML)\n\nStart with:\n```html\n<b>{{PRODUCT_ID}} — Coinbase Spot Data</b>\n````\n\nThen group:\n\n```html\n<b>Price</b>\n• Last: {{lastPrice}}\n• Mid (derived): {{midPrice}}  <!-- optional: (best_bid+best_ask)/2 -->\n• Change (24h): {{pctChange}}%\n\n<b>24h Stats</b>\n• Open: {{open}} • High: {{high}} • Low: {{low}} • Last: {{last}}\n• Volume: {{baseVol}}\n\n<b>Order Book (Top 5)</b>\n• Bids: [price x size] …\n• Asks: [price x size] …\n\n<b>Candles (latest N)</b>\n• Interval: {{interval}} (O/H/L/C per candle)\n```\n\n---\n\n## ⚠️ Rules\n\n* Always **call the correct Coinbase endpoint** for the requested data.\n* Do **not** fabricate or compute indicators; only basic formatting/derivations (e.g., midpoint) are allowed.\n* Do **not** provide advice, sentiment, or predictions.\n* Do **not** dump raw JSON; present clean, human-readable values.\n* If a request fails or a field is missing, show `N/A` and continue with available data.\n\n---\n\n## 🔧 n8n parameter bindings (suggested)\n\nFor each HTTP Request node:\n\n* `product_id` → `={{ /*n8n-auto-generated-fromAI*/ $fromAI('product_id', 'BTC-USD', 'string') }}`\n* `granularity` → `={{ $fromAI('granularity', 900, 'number') }}`  <!-- 15m default -->\n* `limit` (if you add pagination elsewhere) → `={{ $fromAI('limit', 100, 'number') }}`\n\nExample URL for **Ticker**:\n\n```\nhttps://api.exchange.coinbase.com/products/={{$fromAI('product_id','BTC-USD','string')}}/ticker\n```\n\n```\n\n"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agentTool",
+      "typeVersion": 2.2,
+      "position": [
+        2480,
+        256
+      ],
+      "id": "0b791ea4-122d-4dde-816b-1d3e978f8735",
+      "name": "Coinbase Spot Market Data AI Agent Tool"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Adds \"SessionId\"": {
+      "main": [
+        [
+          {
+            "node": "Crypto Arbitrage AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "User Authentication (Replace Telegram ID)": {
+      "main": [
+        [
+          {
+            "node": "Adds \"SessionId\"",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Splits message is more than 4000 characters": {
+      "main": [
+        [
+          {
+            "node": "Telegram",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger1": {
+      "main": [
+        [
+          {
+            "node": "User Authentication (Replace Telegram ID)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Crypto Arbitrage AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Crypto Arbitrage AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Splits message is more than 4000 characters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Crypto Arbitrage AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Price (Latest)": {
+      "ai_tool": [
+        [
+          {
+            "node": "Binance AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "24h Stats": {
+      "ai_tool": [
+        [
+          {
+            "node": "Binance AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Book Depth": {
+      "ai_tool": [
+        [
+          {
+            "node": "Binance AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Best Bid/Ask": {
+      "ai_tool": [
+        [
+          {
+            "node": "Binance AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Klines (Candles)": {
+      "ai_tool": [
+        [
+          {
+            "node": "Binance AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Average Price": {
+      "ai_tool": [
+        [
+          {
+            "node": "Binance AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recent Trades": {
+      "ai_tool": [
+        [
+          {
+            "node": "Binance AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculator": {
+      "ai_tool": [
+        [
+          {
+            "node": "Binance AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think": {
+      "ai_tool": [
+        [
+          {
+            "node": "Binance AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Binance AI Agent Tool",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory1": {
+      "ai_memory": [
+        [
+          {
+            "node": "Binance AI Agent Tool",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Binance AI Agent Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Crypto Arbitrage AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ticker (24h Stats)": {
+      "ai_tool": [
+        [
+          {
+            "node": "Bitget AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Historical Candles": {
+      "ai_tool": [
+        [
+          {
+            "node": "Bitget AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Bitget AI Agent Tool",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Book Depth1": {
+      "ai_tool": [
+        [
+          {
+            "node": "Bitget AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recent Trades1": {
+      "ai_tool": [
+        [
+          {
+            "node": "Bitget AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Klines (Candles)1": {
+      "ai_tool": [
+        [
+          {
+            "node": "Bitget AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory2": {
+      "ai_memory": [
+        [
+          {
+            "node": "Bitget AI Agent Tool",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculator1": {
+      "ai_tool": [
+        [
+          {
+            "node": "Bitget AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think1": {
+      "ai_tool": [
+        [
+          {
+            "node": "Bitget AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bitget AI Agent Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Crypto Arbitrage AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model3": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "HTX AI Agent Tool",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory3": {
+      "ai_memory": [
+        [
+          {
+            "node": "HTX AI Agent Tool",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculator2": {
+      "ai_tool": [
+        [
+          {
+            "node": "HTX AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think2": {
+      "ai_tool": [
+        [
+          {
+            "node": "HTX AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "24h Stats1": {
+      "ai_tool": [
+        [
+          {
+            "node": "HTX AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Book Depth2": {
+      "ai_tool": [
+        [
+          {
+            "node": "HTX AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Price (Latest)1": {
+      "ai_tool": [
+        [
+          {
+            "node": "HTX AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Best Bid/Ask1": {
+      "ai_tool": [
+        [
+          {
+            "node": "HTX AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Klines (Candles)2": {
+      "ai_tool": [
+        [
+          {
+            "node": "HTX AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Average Price1": {
+      "ai_tool": [
+        [
+          {
+            "node": "HTX AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recent Trades2": {
+      "ai_tool": [
+        [
+          {
+            "node": "HTX AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTX AI Agent Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Crypto Arbitrage AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ticker (Latest & Stats)": {
+      "ai_tool": [
+        [
+          {
+            "node": "Bybit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model4": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Bybit Spot Market Data AI Agent Tool",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory4": {
+      "ai_memory": [
+        [
+          {
+            "node": "Bybit Spot Market Data AI Agent Tool",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculator3": {
+      "ai_tool": [
+        [
+          {
+            "node": "Bybit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think3": {
+      "ai_tool": [
+        [
+          {
+            "node": "Bybit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "24h Stats2": {
+      "ai_tool": [
+        [
+          {
+            "node": "Bybit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Book Depth3": {
+      "ai_tool": [
+        [
+          {
+            "node": "Bybit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Price (Latest)2": {
+      "ai_tool": [
+        [
+          {
+            "node": "Bybit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Best Bid/Ask2": {
+      "ai_tool": [
+        [
+          {
+            "node": "Bybit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Klines (Candles)3": {
+      "ai_tool": [
+        [
+          {
+            "node": "Bybit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recent Trades3": {
+      "ai_tool": [
+        [
+          {
+            "node": "Bybit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Bybit Spot Market Data AI Agent Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Crypto Arbitrage AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Average Price (via Ticker)": {
+      "ai_tool": [
+        [
+          {
+            "node": "KuCoin Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "KuCoin Spot Market Data AI Agent Tool",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory5": {
+      "ai_memory": [
+        [
+          {
+            "node": "KuCoin Spot Market Data AI Agent Tool",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculator4": {
+      "ai_tool": [
+        [
+          {
+            "node": "KuCoin Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think4": {
+      "ai_tool": [
+        [
+          {
+            "node": "KuCoin Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "24h Stats3": {
+      "ai_tool": [
+        [
+          {
+            "node": "KuCoin Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Book Depth4": {
+      "ai_tool": [
+        [
+          {
+            "node": "KuCoin Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Price (Latest)3": {
+      "ai_tool": [
+        [
+          {
+            "node": "KuCoin Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Best Bid/Ask3": {
+      "ai_tool": [
+        [
+          {
+            "node": "KuCoin Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Klines (Candles)4": {
+      "ai_tool": [
+        [
+          {
+            "node": "KuCoin Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recent Trades4": {
+      "ai_tool": [
+        [
+          {
+            "node": "KuCoin Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "KuCoin Spot Market Data AI Agent Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Crypto Arbitrage AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model6": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "MEXC Spot Market Data AI Agent Tool",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory6": {
+      "ai_memory": [
+        [
+          {
+            "node": "MEXC Spot Market Data AI Agent Tool",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think5": {
+      "ai_tool": [
+        [
+          {
+            "node": "MEXC Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "24h Stats4": {
+      "ai_tool": [
+        [
+          {
+            "node": "MEXC Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Book Depth5": {
+      "ai_tool": [
+        [
+          {
+            "node": "MEXC Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Price (Latest)4": {
+      "ai_tool": [
+        [
+          {
+            "node": "MEXC Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Best Bid/Ask4": {
+      "ai_tool": [
+        [
+          {
+            "node": "MEXC Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Klines (Candles)5": {
+      "ai_tool": [
+        [
+          {
+            "node": "MEXC Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recent Trades5": {
+      "ai_tool": [
+        [
+          {
+            "node": "MEXC Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MEXC Spot Market Data AI Agent Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Crypto Arbitrage AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Average / Mark Price": {
+      "ai_tool": [
+        [
+          {
+            "node": "OKX Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model7": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "OKX Spot Market Data AI Agent Tool",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory7": {
+      "ai_memory": [
+        [
+          {
+            "node": "OKX Spot Market Data AI Agent Tool",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculator6": {
+      "ai_tool": [
+        [
+          {
+            "node": "OKX Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think6": {
+      "ai_tool": [
+        [
+          {
+            "node": "OKX Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "24h Stats5": {
+      "ai_tool": [
+        [
+          {
+            "node": "OKX Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Book Depth6": {
+      "ai_tool": [
+        [
+          {
+            "node": "OKX Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Price (Latest)5": {
+      "ai_tool": [
+        [
+          {
+            "node": "OKX Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Best Bid/Ask5": {
+      "ai_tool": [
+        [
+          {
+            "node": "OKX Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Klines (Candles)6": {
+      "ai_tool": [
+        [
+          {
+            "node": "OKX Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recent Trades6": {
+      "ai_tool": [
+        [
+          {
+            "node": "OKX Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OKX Spot Market Data AI Agent Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Crypto Arbitrage AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "24h Stats (Ticker)1": {
+      "ai_tool": [
+        [
+          {
+            "node": "Gate Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model8": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Gate Spot Market Data AI Agent Tool",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory8": {
+      "ai_memory": [
+        [
+          {
+            "node": "Gate Spot Market Data AI Agent Tool",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculator7": {
+      "ai_tool": [
+        [
+          {
+            "node": "Gate Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think7": {
+      "ai_tool": [
+        [
+          {
+            "node": "Gate Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "24h Stats6": {
+      "ai_tool": [
+        [
+          {
+            "node": "Gate Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Book Depth7": {
+      "ai_tool": [
+        [
+          {
+            "node": "Gate Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Price (Latest)6": {
+      "ai_tool": [
+        [
+          {
+            "node": "Gate Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Best Bid/Ask6": {
+      "ai_tool": [
+        [
+          {
+            "node": "Gate Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Klines (Candles)7": {
+      "ai_tool": [
+        [
+          {
+            "node": "Gate Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recent Trades7": {
+      "ai_tool": [
+        [
+          {
+            "node": "Gate Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gate Spot Market Data AI Agent Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Crypto Arbitrage AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Average Price (VWAP)": {
+      "ai_tool": [
+        [
+          {
+            "node": "Upbit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upbit Klines (Dynamic)": {
+      "ai_tool": [
+        [
+          {
+            "node": "Upbit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model9": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Upbit Spot Market Data AI Agent Tool",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory9": {
+      "ai_memory": [
+        [
+          {
+            "node": "Upbit Spot Market Data AI Agent Tool",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculator8": {
+      "ai_tool": [
+        [
+          {
+            "node": "Upbit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think8": {
+      "ai_tool": [
+        [
+          {
+            "node": "Upbit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "24h Stats7": {
+      "ai_tool": [
+        [
+          {
+            "node": "Upbit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Book Depth8": {
+      "ai_tool": [
+        [
+          {
+            "node": "Upbit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Price (Latest)7": {
+      "ai_tool": [
+        [
+          {
+            "node": "Upbit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Best Bid/Ask7": {
+      "ai_tool": [
+        [
+          {
+            "node": "Upbit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recent Trades8": {
+      "ai_tool": [
+        [
+          {
+            "node": "Upbit Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Upbit Spot Market Data AI Agent Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Crypto Arbitrage AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Average Price (Derived)": {
+      "ai_tool": [
+        [
+          {
+            "node": "Coinbase Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model10": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Coinbase Spot Market Data AI Agent Tool",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory10": {
+      "ai_memory": [
+        [
+          {
+            "node": "Coinbase Spot Market Data AI Agent Tool",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculator9": {
+      "ai_tool": [
+        [
+          {
+            "node": "Coinbase Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Think9": {
+      "ai_tool": [
+        [
+          {
+            "node": "Coinbase Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "24h Stats8": {
+      "ai_tool": [
+        [
+          {
+            "node": "Coinbase Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Order Book Depth9": {
+      "ai_tool": [
+        [
+          {
+            "node": "Coinbase Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Price (Latest)8": {
+      "ai_tool": [
+        [
+          {
+            "node": "Coinbase Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Best Bid/Ask8": {
+      "ai_tool": [
+        [
+          {
+            "node": "Coinbase Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Klines (Candles)8": {
+      "ai_tool": [
+        [
+          {
+            "node": "Coinbase Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recent Trades9": {
+      "ai_tool": [
+        [
+          {
+            "node": "Coinbase Spot Market Data AI Agent Tool",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Coinbase Spot Market Data AI Agent Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "Crypto Arbitrage AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "ae4922b2-0c23-4df2-8a01-c3df053e98bf",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "a5283507e1917a33cc3ae615b2e7d5ad2c1e50955e6f831272ddd5ab816f3fb6"
+  },
+  "id": "sZM9Mo5ojnac5J37",
+  "tags": []
+}
