@@ -103,6 +103,17 @@ Each agent is designed to be:
 * Integrates with Upbit API  
 * Provides spot market data, portfolio insights, and execution tools  
 * Tailored for Korean and international traders seeking secure automation  
+* 🎥 **Tutorial:** [Watch on YouTube](https://youtu.be/Yf6HJE_eu2k) 
+
+---
+
+### 🔟 Binance AI Agent *(Binance AI Agent v1.02.json)*
+
+* 🌐 [Binance Website](https://www.binance.com)
+* Integrates with Binance API  
+* Supports spot, futures, margin, and options trading  
+* Automates strategies, portfolio management, and multi-market execution  
+* Built as the **flagship AI Agent** for the world’s largest exchange  
 * 🎥 **Tutorial:** [Watch on YouTube]() 
 
 ---
