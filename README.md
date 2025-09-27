@@ -114,7 +114,7 @@ Each agent is designed to be:
 * Supports spot, futures, margin, and options trading  
 * Automates strategies, portfolio management, and multi-market execution  
 * Built as the **flagship AI Agent** for the world’s largest exchange  
-* 🎥 **Tutorial:** [Watch on YouTube]() 
+* 🎥 **Tutorial:** [Watch on YouTube](https://youtu.be/XoteI6YCOHU) 
 
 ---
 
