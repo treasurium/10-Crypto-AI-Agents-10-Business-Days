@@ -34,7 +34,7 @@ Each agent is designed to be:
 
 ### 3️⃣ Bitget AI Agent *(Bitget AI Agent v1.02.json)*
 
-* 🌐 [Bitget Website](https://www.bitget.com)
+* 🌐 [Bitget Website](https://partner.bitget.com/bg/AEC3JB)
 * Integrates with Bitget API
 * Enables automated portfolio tracking, trading, and data-driven strategies
 * Supports order book insights, market stats, and real-time trade execution
